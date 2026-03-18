@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Send, Mic, Video, Paperclip, Play, Pause, FileText, X, MessageCircle, Phone, UserPlus, ChevronLeft, ChevronRight, MoreVertical, Shield, ShieldAlert, ShieldCheck, UserMinus, CornerUpRight, Pencil, Trash2, Forward, Lock, Clock, CheckCheck } from 'lucide-react';
+import { ArrowLeft, Send, Mic, Video, Paperclip, Play, Pause, FileText, X, MessageCircle, Phone, UserPlus, ChevronLeft, ChevronRight, MoreVertical, Shield, ShieldAlert, ShieldCheck, UserMinus, CornerUpRight, Pencil, Trash2, Forward, Lock, Clock, CheckCheck, Check } from 'lucide-react';
 
 const Portal = ({ children }) => {
   const [mounted, setMounted] = useState(false);
@@ -34,15 +34,18 @@ const getMediaPreview = (msg) => {
   return '📎 Файл';
 };
 
-const TelegramAudioPlayer = ({ src, isMe, callVolume }) => {
+// === ОБНОВЛЕННЫЙ АУДИОПЛЕЕР С АНИМАЦИЕЙ ===
+const TelegramAudioPlayer = ({ src, isMe, callVolume, status }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef(null);
 
+  const isUploading = status === 'loading';
+
   const formatTime = (time) => { if (isNaN(time)) return "0:00"; const m = Math.floor(time / 60); const s = Math.floor(time % 60); return `${m}:${s < 10 ? '0' : ''}${s}`; };
-  const togglePlay = () => { isPlaying ? audioRef.current.pause() : audioRef.current.play(); setIsPlaying(!isPlaying); };
+  const togglePlay = () => { if(isUploading) return; isPlaying ? audioRef.current.pause() : audioRef.current.play(); setIsPlaying(!isPlaying); };
   const handleTimeUpdate = () => { setCurrentTime(audioRef.current.currentTime); setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100); };
   const handleLoadedMetadata = () => setDuration(audioRef.current.duration);
   const handleEnded = () => { setIsPlaying(false); setProgress(0); setCurrentTime(0); };
@@ -50,9 +53,9 @@ const TelegramAudioPlayer = ({ src, isMe, callVolume }) => {
   useEffect(() => { if (audioRef.current && callVolume !== undefined) audioRef.current.volume = callVolume; }, [callVolume]);
 
   return (
-    <div className="flex items-center gap-3 w-64 pt-1 pb-1 px-1">
-      <button onClick={togglePlay} className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm transition-transform active:scale-95 bg-blue-500 text-white">
-        {isPlaying ? <Pause size={20} className="fill-current" /> : <Play size={20} className="ml-1 fill-current" />}
+    <div className={`flex items-center gap-3 w-64 pt-1 pb-1 px-1 transition-opacity ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}>
+      <button onClick={togglePlay} disabled={isUploading} className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm transition-transform active:scale-95 bg-blue-500 text-white relative">
+        {isUploading ? <div className="w-5 h-5 border-[2.5px] border-white/30 border-t-white rounded-full animate-spin"></div> : (isPlaying ? <Pause size={20} className="fill-current" /> : <Play size={20} className="ml-1 fill-current" />)}
       </button>
       <div className="flex-1 flex flex-col justify-center cursor-pointer">
         <div className={`w-full h-[4px] rounded-full relative ${isMe ? 'bg-[#bde096]' : 'bg-gray-200'}`}>
@@ -61,7 +64,7 @@ const TelegramAudioPlayer = ({ src, isMe, callVolume }) => {
           </div>
         </div>
         <div className={`flex justify-between mt-1.5 text-[11px] font-medium ${isMe ? 'text-green-800' : 'text-gray-500'}`}>
-          <span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span>
+          <span>{formatTime(currentTime)}</span><span>{isUploading ? 'Загрузка...' : formatTime(duration)}</span>
         </div>
       </div>
       <audio ref={audioRef} src={src} onTimeUpdate={handleTimeUpdate} onLoadedMetadata={handleLoadedMetadata} onEnded={handleEnded} className="hidden" />
@@ -69,14 +72,25 @@ const TelegramAudioPlayer = ({ src, isMe, callVolume }) => {
   );
 };
 
-const SmartVideoCircle = ({ src }) => {
+// === ОБНОВЛЕННЫЙ ВИДЕОКРУЖОК С АНИМАЦИЕЙ ===
+const SmartVideoCircle = ({ src, status }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const isUploading = status === 'loading';
   return (
-    <>
-      <div className={`w-48 h-48 sm:w-56 sm:h-56 rounded-full overflow-hidden border-2 border-white shadow-md bg-black cursor-pointer hover:shadow-lg transition-all ${isExpanded ? 'opacity-0' : 'opacity-100'}`} onClick={() => setIsExpanded(true)}>
+    <div className="relative mt-1">
+      <div className={`w-48 h-48 sm:w-56 sm:h-56 rounded-full overflow-hidden border-2 border-white shadow-md bg-black transition-all ${isExpanded ? 'opacity-0' : 'opacity-100'} ${isUploading ? 'blur-sm scale-[1.02] cursor-default opacity-90' : 'cursor-pointer hover:shadow-lg'}`} onClick={() => !isUploading && setIsExpanded(true)}>
         <video src={src} autoPlay loop muted playsInline className="w-full h-full object-cover pointer-events-none" />
       </div>
-      {isExpanded && (
+      
+      {isUploading && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className="w-12 h-12 bg-black/40 rounded-full flex items-center justify-center backdrop-blur-sm shadow-lg">
+            <div className="w-6 h-6 border-[3px] border-white/30 border-t-white rounded-full animate-spin"></div>
+          </div>
+        </div>
+      )}
+
+      {isExpanded && !isUploading && (
         <Portal>
           <div className="fixed inset-0 z-[9999] pointer-events-none flex items-start justify-end md:p-8 p-4">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto transition-opacity" onClick={() => setIsExpanded(false)}></div>
@@ -86,11 +100,10 @@ const SmartVideoCircle = ({ src }) => {
           </div>
         </Portal>
       )}
-    </>
+    </div>
   );
 };
 
-// === ОБНОВЛЕННАЯ ГАЛЕРЕЯ С АНИМАЦИЕЙ И РАЗМЫТИЕМ ЗАГРУЗКИ ===
 const ImageGallery = ({ imagesStr, status }) => {
   const images = JSON.parse(imagesStr);
   const [isOpen, setIsOpen] = useState(false);
@@ -101,7 +114,6 @@ const ImageGallery = ({ imagesStr, status }) => {
   const next = (e) => { e.stopPropagation(); setCurrentIndex(c => (c < images.length - 1 ? c + 1 : 0)); };
   const prev = (e) => { e.stopPropagation(); setCurrentIndex(c => (c > 0 ? c - 1 : images.length - 1)); };
 
-  // CSS классы для размытия и плавного появления
   const singleImgClass = `w-full max-w-xs max-h-80 object-cover transition-all duration-700 ease-out ${isUploading ? 'blur-md scale-110 opacity-80 cursor-default' : 'cursor-pointer hover:opacity-90 blur-0 scale-100 opacity-100'}`;
   const gridImgClass = `w-full h-full object-cover transition-all duration-700 ease-out ${isUploading ? 'blur-md scale-110 opacity-80 cursor-default' : 'cursor-pointer hover:opacity-90 blur-0 scale-100 opacity-100'}`;
 
@@ -138,7 +150,6 @@ const ImageGallery = ({ imagesStr, status }) => {
         )}
       </div>
 
-      {/* ИНДИКАТОР ЗАГРУЗКИ ПОВЕРХ РАЗМЫТОГО ФОТО */}
       {isUploading && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="w-12 h-12 bg-black/40 rounded-full flex items-center justify-center backdrop-blur-sm shadow-lg">
@@ -206,7 +217,7 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
 
   useEffect(() => {
     if (!socket) return;
-    // === ИСПРАВЛЕНО: Умная замена фейкового сообщения загрузки на реальное ===
+    
     const handleReceiveMessage = (msg) => { 
       if (msg.chatId === chat.id) { 
         setMessages((prev) => {
@@ -220,9 +231,35 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         }); 
       } 
     };
+
+    // === НОВОЕ: Обработчик получения сигнала о прочтении ===
+    const handleMessagesRead = ({ chatId: readChatId, messageIds, userEmail }) => {
+      if (readChatId === chat.id) {
+        setMessages(prev => prev.map(m => messageIds.includes(m.id) && m.senderEmail !== userEmail ? { ...m, readBy: [...new Set([...(m.readBy||[]), userEmail])] } : m));
+      }
+    };
+
     socket.on('receive_message', handleReceiveMessage);
-    return () => socket.off('receive_message', handleReceiveMessage);
+    socket.on('messages_read', handleMessagesRead);
+    return () => {
+      socket.off('receive_message', handleReceiveMessage);
+      socket.off('messages_read', handleMessagesRead);
+    }
   }, [socket, chat.id]);
+
+  // === НОВОЕ: Автоматически помечаем непрочитанные сообщения как прочитанные ===
+  useEffect(() => {
+    if (!socket || !chat.id || !currentUser || messages.length === 0) return;
+    const unreadIds = messages
+      .filter(m => m.senderEmail !== currentUser.email && (!m.readBy || !m.readBy.includes(currentUser.email)))
+      .map(m => m.id);
+      
+    if (unreadIds.length > 0) {
+       socket.emit('mark_read', { chatId: chat.id, messageIds: unreadIds, userEmail: currentUser.email });
+       // Сразу обновляем у себя локально, чтобы не спамить сервер
+       setMessages(prev => prev.map(m => unreadIds.includes(m.id) ? { ...m, readBy: [...(m.readBy||[]), currentUser.email] } : m));
+    }
+  }, [messages, socket, chat.id, currentUser]);
 
   const sendMessage = (type, content, fileName = '') => {
     if (type === 'text' && !content.trim()) return;
@@ -260,7 +297,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
     }
   };
 
-  // === НОВАЯ ЛОГИКА ОПТИМИСТИЧНОЙ ЗАГРУЗКИ ФАЙЛОВ ===
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -272,7 +308,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
       const msgId = Date.now();
       const localPreviews = imageFiles.map(file => URL.createObjectURL(file));
       
-      // 1. Мгновенно показываем сообщение в UI (Оно будет размытым)
       const tempMsg = {
         id: msgId,
         chatId: chat.id,
@@ -281,12 +316,12 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         senderAvatar: currentUser.avatar,
         type: imageFiles.length > 1 ? 'image_gallery' : 'image',
         displayContent: imageFiles.length > 1 ? JSON.stringify(localPreviews) : localPreviews[0],
-        status: 'loading', // Флаг для анимации
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        status: 'loading', 
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        readBy: []
       };
       setMessages(prev => [...prev, tempMsg]);
 
-      // 2. Читаем файлы
       const imagePromises = imageFiles.map(file => new Promise(resolve => {
         const reader = new FileReader(); 
         reader.onloadend = () => resolve(reader.result); 
@@ -294,29 +329,27 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
       }));
       const base64Images = await Promise.all(imagePromises);
       
-      // Искусственная задержка для красоты анимации (чтобы юзер успел увидеть блюр)
       await new Promise(res => setTimeout(res, 800));
 
-      // 3. Отправляем
       const payloadContent = imageFiles.length > 1 ? JSON.stringify(base64Images) : base64Images[0];
       socket.emit('send_message', { 
         chatId: chat.id, id: msgId, type: imageFiles.length > 1 ? 'image_gallery' : 'image', content: payloadContent, time: tempMsg.time 
       });
     }
 
-    // Для остальных файлов (документов)
     otherFiles.forEach(file => {
       const msgId = Date.now() + Math.random();
       const tempMsg = {
          id: msgId, chatId: chat.id, senderEmail: currentUser.email, senderName: currentUser.name,
          senderAvatar: currentUser.avatar, type: 'file', fileName: file.name, status: 'loading',
-         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+         readBy: []
       };
       setMessages(prev => [...prev, tempMsg]);
 
       const reader = new FileReader(); 
       reader.onloadend = () => { 
-        setTimeout(() => { // Для красоты анимации
+        setTimeout(() => { 
           socket.emit('send_message', { chatId: chat.id, id: msgId, type: 'file', content: reader.result, fileName: file.name, time: tempMsg.time }); 
         }, 800);
       }; 
@@ -389,17 +422,38 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
     else if (chat.type === 'group' && !chat.isGlobal) setIsGroupInfoModalOpen(true);
   };
 
+  // === НОВОЕ: АНИМАЦИЯ И ОПТИМИСТИЧНАЯ ЗАГРУЗКА АУДИО И ВИДЕО ===
   const startRecording = async (type) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
       streamRef.current = stream; setRecordType(type); setIsRecording(true); isCancelledRef.current = false; recordStartTimeRef.current = Date.now();
       const mediaRecorder = new MediaRecorder(stream); mediaRecorderRef.current = mediaRecorder; chunksRef.current = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach(track => track.stop()); streamRef.current = null;
         if (isCancelledRef.current) return;
+        
         const blob = new Blob(chunksRef.current, { type: type === 'video' ? 'video/webm' : 'audio/webm' });
-        const reader = new FileReader(); reader.onloadend = () => sendMessage(type, reader.result); reader.readAsDataURL(blob);
+        
+        // 1. Показываем в чате моментально (с анимацией загрузки)
+        const localUrl = URL.createObjectURL(blob);
+        const msgId = Date.now();
+        const tempMsg = {
+           id: msgId, chatId: chat.id, senderEmail: currentUser.email, senderName: currentUser.name,
+           senderAvatar: currentUser.avatar, type, displayContent: localUrl, status: 'loading',
+           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), readBy: []
+        };
+        setMessages(prev => [...prev, tempMsg]);
+
+        // 2. Конвертируем и отправляем с задержкой (чтобы видеть анимацию)
+        const reader = new FileReader(); 
+        reader.onloadend = () => { 
+          setTimeout(() => { 
+             socket.emit('send_message', { chatId: chat.id, id: msgId, type, content: reader.result, time: tempMsg.time }); 
+          }, 800);
+        }; 
+        reader.readAsDataURL(blob);
       };
       mediaRecorder.start();
     } catch (err) { alert('Нужен доступ к камере/микрофону'); }
@@ -565,11 +619,9 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
               
               {msg.type === 'text' && <p className="text-[15px] px-1 text-gray-900 leading-snug break-words">{decryptText(msg.content, secretKey)}</p>}
               
-              {/* === ЗАГРУЖАЕМЫЕ ИЗОБРАЖЕНИЯ === */}
               {msg.type === 'image' && <ImageGallery imagesStr={JSON.stringify([msg.displayContent || msg.content])} status={msg.status} />}
               {msg.type === 'image_gallery' && <ImageGallery imagesStr={msg.displayContent || msg.content} status={msg.status} />}
 
-              {/* === ЗАГРУЖАЕМЫЕ ДОКУМЕНТЫ === */}
               {msg.type === 'file' && (
                 <div className={`flex items-center gap-3 p-3 rounded-xl mt-1 transition-opacity ${isMe ? 'bg-[#d6f0ba]' : 'bg-gray-100'} ${msg.status === 'loading' ? 'opacity-60' : 'opacity-100'}`}>
                   <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white flex-shrink-0">
@@ -579,15 +631,16 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
                 </div>
               )}
 
-              {msg.type === 'audio' && <TelegramAudioPlayer src={msg.displayContent || msg.content} isMe={isMe} callVolume={callVolume} />}
-              {msg.type === 'video' && <SmartVideoCircle src={msg.displayContent || msg.content} />}
+              {msg.type === 'audio' && <TelegramAudioPlayer src={msg.displayContent || msg.content} isMe={isMe} callVolume={callVolume} status={msg.status} />}
+              {msg.type === 'video' && <SmartVideoCircle src={msg.displayContent || msg.content} status={msg.status} />}
               
-              {/* === ЧАСИКИ ИЛИ ГАЛОЧКИ === */}
+              {/* === УМНЫЕ ГАЛОЧКИ === */}
               <div className="flex items-center justify-end gap-1 mt-1.5 ml-3 text-[11px] text-gray-400">
                 {msg.isEdited && <span className="font-medium italic mr-1">изменено</span>}
                 <span className="font-medium">{msg.time}</span>
                 {isMe && (
-                   msg.status === 'loading' ? <Clock size={12} className="opacity-70 ml-0.5" /> : <CheckCheck size={14} className="text-blue-500 ml-0.5" />
+                   msg.status === 'loading' ? <Clock size={12} className="opacity-70 ml-0.5" /> : 
+                   (msg.readBy && msg.readBy.length > 0 ? <CheckCheck size={14} className="text-blue-500 ml-0.5" /> : <Check size={14} className="text-gray-400 ml-0.5" />)
                 )}
               </div>
             </div>
@@ -606,9 +659,7 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
           <div className="flex items-center justify-between bg-blue-50 border-l-2 border-blue-500 px-4 py-2 animate-in slide-in-from-bottom-2 duration-150">
             <div className="flex flex-col overflow-hidden">
               <span className="text-[12px] font-bold text-blue-500">{editingMessage ? 'Редактирование' : `Ответ для ${replyingTo.senderName}`}</span>
-              <span className="text-[13px] text-gray-600 truncate">
-                 {editingMessage ? decryptText(editingMessage.content, secretKey) : getMediaPreview({ ...replyingTo, chatId: chat.id })}
-              </span>
+              <span className="text-[13px] text-gray-600 truncate">{decryptText((editingMessage || replyingTo).content, secretKey)}</span>
             </div>
             <button onClick={() => { setReplyingTo(null); setEditingMessage(null); setInputText(''); }} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors"><X size={18} /></button>
           </div>
@@ -635,6 +686,7 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         </div>
       </div>
 
+      {/* ОСТАЛЬНЫЕ МОДАЛКИ (Не изменились) */}
       {selectedUserProfile && (
         <Portal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setSelectedUserProfile(null)}>
@@ -646,12 +698,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
                 {selectedUserProfile.email !== currentUser.email && <button onClick={handleStartPrivateChat} className="flex flex-col items-center gap-1.5 text-blue-500 hover:text-blue-600 transition-colors group"><div className="w-12 h-12 rounded-full bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-colors"><MessageCircle size={22} className="fill-current opacity-20" /></div><span className="text-[11px] font-semibold uppercase tracking-wide">Написать</span></button>}
                 {selectedUserProfile.email !== currentUser.email && <button onClick={() => { setSelectedUserProfile(null); onStartCall(selectedUserProfile, false); }} className="flex flex-col items-center gap-1.5 text-blue-500 hover:text-blue-600 transition-colors group"><div className="w-12 h-12 rounded-full bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-colors"><Phone size={22} className="fill-current opacity-20" /></div><span className="text-[11px] font-semibold uppercase tracking-wide">Звонок</span></button>}
                 {selectedUserProfile.email !== currentUser.email && <button onClick={() => { setSelectedUserProfile(null); onStartCall(selectedUserProfile, true); }} className="flex flex-col items-center gap-1.5 text-blue-500 hover:text-blue-600 transition-colors group"><div className="w-12 h-12 rounded-full bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-colors"><Video size={22} className="fill-current opacity-20" /></div><span className="text-[11px] font-semibold uppercase tracking-wide">Видео</span></button>}
-                {selectedUserProfile.email === currentUser.email && (
-                  <>
-                    <button className="flex flex-col items-center gap-1.5 text-gray-400 opacity-60 cursor-not-allowed"><div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center"><Phone size={22} /></div><span className="text-[11px] font-semibold uppercase tracking-wide">Звонок</span></button>
-                    <button className="flex flex-col items-center gap-1.5 text-gray-400 opacity-60 cursor-not-allowed"><div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center"><Video size={22} /></div><span className="text-[11px] font-semibold uppercase tracking-wide">Видео</span></button>
-                  </>
-                )}
               </div>
             </div>
           </div>
