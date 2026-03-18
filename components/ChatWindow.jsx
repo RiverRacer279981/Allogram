@@ -25,6 +25,15 @@ const decryptText = (encoded, key) => {
   } catch(e) { return encoded; }
 };
 
+const getMediaPreview = (msg) => {
+  if (!msg) return '';
+  if (msg.type === 'text') return decryptText(msg.content, `ALLOGRAM_E2EE_${msg.chatId}`);
+  if (msg.type === 'audio') return '🎤 Голосовое сообщение';
+  if (msg.type === 'video') return '📹 Видеосообщение';
+  if (msg.type === 'image' || msg.type === 'image_gallery') return '🖼️ Фотография';
+  return '📎 Файл';
+};
+
 const TelegramAudioPlayer = ({ src, isMe, callVolume }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -38,11 +47,7 @@ const TelegramAudioPlayer = ({ src, isMe, callVolume }) => {
   const handleLoadedMetadata = () => setDuration(audioRef.current.duration);
   const handleEnded = () => { setIsPlaying(false); setProgress(0); setCurrentTime(0); };
 
-  useEffect(() => {
-    if (audioRef.current && callVolume !== undefined) {
-      audioRef.current.volume = callVolume;
-    }
-  }, [callVolume]);
+  useEffect(() => { if (audioRef.current && callVolume !== undefined) audioRef.current.volume = callVolume; }, [callVolume]);
 
   return (
     <div className="flex items-center gap-3 w-64 pt-1 pb-1 px-1">
@@ -138,7 +143,7 @@ const ImageGallery = ({ imagesStr }) => {
   );
 };
 
-export default function ChatWindow({ chat, chatName, initialMessages, onBack, socket, currentUser, allUsers, chats, onSwitchChat, wallpaper, userStatuses, onStartCall }) {
+export default function ChatWindow({ chat, chatName, initialMessages, onBack, socket, currentUser, allUsers, chats, onSwitchChat, wallpaper, userStatuses, onStartCall, callVolume }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   
@@ -146,6 +151,8 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
   const [editingMessage, setEditingMessage] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [forwardingMessage, setForwardingMessage] = useState(null);
+  const [deleteModal, setDeleteModal] = useState(null); // Окно удаления
+  const [deletingIds, setDeletingIds] = useState([]); // Для красивой анимации
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordType, setRecordType] = useState(null); 
@@ -154,7 +161,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
   const [isGroupInfoModalOpen, setIsGroupInfoModalOpen] = useState(false);
 
   const secretKey = `ALLOGRAM_E2EE_${chat.id}`;
-
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
@@ -199,12 +205,29 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
     const payloadContent = type === 'text' ? encryptText(content, secretKey) : content;
     let replyPayload = null;
     if (replyingTo) {
-      replyPayload = { id: replyingTo.id, senderName: replyingTo.senderName, content: replyingTo.type === 'text' ? replyingTo.content : (replyingTo.fileName || 'Медиафайл') };
+      replyPayload = { 
+        id: replyingTo.id, 
+        senderName: replyingTo.senderName, 
+        preview: getMediaPreview({ ...replyingTo, chatId: chat.id }) 
+      };
     }
 
     socket.emit('send_message', { chatId: chat.id, id: Date.now(), type, content: payloadContent, fileName, replyTo: replyPayload, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
     if (type === 'text') setInputText('');
     setReplyingTo(null);
+  };
+
+  // === ПЛАВНЫЙ СКРОЛЛ К ОТВЕТУ ===
+  const scrollToMessage = (id) => {
+    const el = document.getElementById(`msg-wrapper-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const bubble = el.querySelector('.message-bubble');
+      if (bubble) {
+        bubble.classList.add('brightness-90', 'scale-[1.02]');
+        setTimeout(() => bubble.classList.remove('brightness-90', 'scale-[1.02]'), 1000);
+      }
+    }
   };
 
   const handleFileUpload = async (e) => {
@@ -228,71 +251,23 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
 
   const handleContextMenu = (e, msg) => {
     e.preventDefault();
-    const isMe = msg.senderEmail === currentUser.email;
     const menuWidth = 160; 
-    const menuHeight = 150; 
-    
-    let x = e.pageX;
-    let y = e.pageY;
-
-    if (isMe) x = e.pageX - menuWidth;
+    let x = e.pageX; let y = e.pageY;
+    if (msg.senderEmail === currentUser.email) x = e.pageX - menuWidth;
     if (x < 10) x = 10;
     if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 10;
-    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 10;
-
+    if (y + 150 > window.innerHeight) y = window.innerHeight - 150 - 10;
     setContextMenu({ x, y, msg });
   };
 
-  const closeContextMenu = () => setContextMenu(null);
-
-  const handleAction = (action) => {
-    if (!contextMenu) return;
-    const { msg } = contextMenu;
-    
-    if (action === 'reply') {
-      setReplyingTo(msg); setEditingMessage(null); setTimeout(() => document.getElementById('chat-input')?.focus(), 50);
-    } else if (action === 'edit') {
-      setEditingMessage(msg); setReplyingTo(null); setInputText(decryptText(msg.content, secretKey)); setTimeout(() => document.getElementById('chat-input')?.focus(), 50);
-    } else if (action === 'forward') {
-      setForwardingMessage(msg);
-    }
-    closeContextMenu();
-  };
-
-  const handleForwardSelectChat = (targetChat) => {
-    if (!forwardingMessage) return;
-    let payloadContent = forwardingMessage.content; 
-    if (forwardingMessage.type === 'text') {
-      const decryptedText = decryptText(forwardingMessage.content, secretKey);
-      const targetSecretKey = `ALLOGRAM_E2EE_${targetChat.id}`;
-      payloadContent = encryptText(decryptedText, targetSecretKey);
-    }
-    
-    socket.emit('send_message', { 
-      chatId: targetChat.id, 
-      id: Date.now(), 
-      type: forwardingMessage.type, 
-      content: payloadContent, 
-      fileName: forwardingMessage.fileName, 
-      isForwarded: true, 
-      forwardedFrom: forwardingMessage.senderName, 
-      originalChatId: chat.type === 'group' ? chat.id : null, 
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-    });
-    
-    setForwardingMessage(null);
-    onSwitchChat(targetChat);
-  };
-
-  const handleStartPrivateChat = () => { if (!selectedUserProfile) return; socket.emit('start_private_chat', { email: selectedUserProfile.email, name: selectedUserProfile.name, avatar: selectedUserProfile.avatar }, (response) => { if (response.success) { setSelectedUserProfile(null); onSwitchChat(response.chat); } }); };
-  const handleAddUserToGroup = (userEmail) => { socket.emit('add_to_group', { chatId: chat.id, userEmail }, (response) => { if (response.success) setIsAddUserModalOpen(false); else alert(response.error); }); };
-  const handleRemoveMember = (email) => { socket.emit('remove_from_group', { chatId: chat.id, userEmail: email, requesterEmail: currentUser.email }, (res) => { if (!res.success) alert(res.error); }); };
-  const handleUpdateRole = (email, newRole) => { socket.emit('update_role', { chatId: chat.id, userEmail: email, newRole, requesterEmail: currentUser.email }, (res) => { if (!res.success) alert(res.error); }); };
-  const handleDeleteGroup = () => { if (window.confirm('Вы уверены, что хотите удалить эту группу? Все сообщения будут стерты у всех участников.')) { socket.emit('delete_chat', { chatId: chat.id, requesterEmail: currentUser.email }); setIsGroupInfoModalOpen(false); } };
-
-  const handleHeaderClick = () => {
-    if (chat.type === 'private') { const otherUser = chat.members.find(m => m.email !== currentUser.email); if (otherUser) setSelectedUserProfile(otherUser); }
-    else if (chat.type === 'group' && !chat.isGlobal) setIsGroupInfoModalOpen(true);
+  // === УДАЛЕНИЕ СООБЩЕНИЯ С АНИМАЦИЕЙ ===
+  const confirmDelete = (forEveryone) => {
+    const msgId = deleteModal.id;
+    setDeleteModal(null);
+    setDeletingIds(prev => [...prev, msgId]); // Запуск анимации
+    setTimeout(() => {
+      socket.emit('delete_message', { chatId: chat.id, msgId, forEveryone, requesterEmail: currentUser.email });
+    }, 300); // Ждем пока сообщение красиво схлопнется (300мс)
   };
 
   const startRecording = async (type) => {
@@ -318,167 +293,144 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
     }
   };
 
-  const availableUsersToAdd = allUsers?.filter(u => chats?.filter(c => c.type === 'private' && c.members?.some(m => m.email === currentUser.email)).map(c => c.members?.find(m => m.email !== currentUser.email)?.email).filter(Boolean).includes(u.email) && !chat.members?.some(m => m.email === u.email));
-  let statusText = `${chat.members?.length || 0} участников`;
-  if (chat.type === 'private') {
-    const otherUser = chat.members.find(m => m.email !== currentUser.email) || chat.members[0];
-    const status = userStatuses && userStatuses[otherUser.email];
-    if (status) statusText = status.activeChat === chat.id ? 'в сети' : 'был(а) недавно';
-    else statusText = 'был(а) недавно';
-  }
   const amIAdmin = chat.members?.find(m => m.email === currentUser.email)?.role === 'admin';
 
   return (
     <div className="flex flex-col h-full relative font-sans">
       
+      {/* МЕНЮ ДЕЙСТВИЙ */}
       {contextMenu && (
         <Portal>
-          <div className="fixed inset-0 z-[10000]" onClick={closeContextMenu} onContextMenu={(e) => { e.preventDefault(); closeContextMenu(); }}>
+          <div className="fixed inset-0 z-[10000]" onClick={() => setContextMenu(null)} onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}>
             <div 
               className="absolute bg-white rounded-xl shadow-2xl py-1 border border-gray-100 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
               style={{ top: contextMenu.y, left: contextMenu.x }}
               onClick={e => e.stopPropagation()}
             >
-              <button onClick={() => handleAction('reply')} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors">
+              <button onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); document.getElementById('chat-input')?.focus(); }} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors">
                 <CornerUpRight size={16} className="text-gray-500" /> Ответить
               </button>
               {contextMenu.msg.senderEmail === currentUser.email && contextMenu.msg.type === 'text' && (
-                <button onClick={() => handleAction('edit')} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors">
+                <button onClick={() => { setEditingMessage(contextMenu.msg); setInputText(decryptText(contextMenu.msg.content, secretKey)); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors">
                   <Pencil size={16} className="text-gray-500" /> Изменить
                 </button>
               )}
               {!contextMenu.msg.isForwarded && (
-                <button onClick={() => handleAction('forward')} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors border-t border-gray-100 mt-1 pt-2">
+                <button onClick={() => { setForwardingMessage(contextMenu.msg); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors">
                   <Forward size={16} className="text-gray-500" /> Переслать
                 </button>
               )}
+              {/* КНОПКА УДАЛИТЬ */}
+              <button onClick={() => { setDeleteModal(contextMenu.msg); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-red-50 flex items-center gap-3 text-sm text-red-500 transition-colors border-t border-gray-100 mt-1 pt-2">
+                <Trash2 size={16} /> Удалить
+              </button>
             </div>
           </div>
         </Portal>
       )}
 
-      {forwardingMessage && (
+      {/* ОКНО ПОДТВЕРЖДЕНИЯ УДАЛЕНИЯ */}
+      {deleteModal && (
         <Portal>
-          <div className="fixed inset-0 z-[10000] bg-black/50 backdrop-blur-sm flex items-center justify-center" onClick={() => setForwardingMessage(null)}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between items-center p-4 border-b">
-                <h2 className="text-lg font-semibold text-gray-800">Переслать</h2>
-                <button onClick={() => setForwardingMessage(null)} className="p-1.5 hover:bg-gray-100 rounded-full"><X size={20} /></button>
-              </div>
-              <div className="p-2 max-h-80 overflow-y-auto">
-                {(() => {
-                  const availableForwardChats = chats.filter(c => c.id !== chat.id && (c.isGlobal || c.members?.some(m => m.email === currentUser.email)));
-                  if (availableForwardChats.length === 0) {
-                    return (
-                      <div className="p-6 text-center text-gray-500">
-                         <p className="text-[15px] font-semibold text-gray-700 mb-1">Нет других чатов</p>
-                         <p className="text-sm">Вам пока некому переслать это сообщение.</p>
-                      </div>
-                    );
-                  }
-                  return availableForwardChats.map(c => {
-                    const name = c.type === 'private' ? (c.members.find(m => m.email !== currentUser.email)?.name || c.name) : c.name;
-                    const avatar = c.type === 'private' ? c.members.find(m => m.email !== currentUser.email)?.avatar : null;
-                    return (
-                      <div key={c.id} onClick={() => handleForwardSelectChat(c)} className="flex items-center gap-3 p-3 hover:bg-blue-50 cursor-pointer rounded-xl transition-colors">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-400 to-blue-600 overflow-hidden flex items-center justify-center text-white font-bold">
-                          {avatar ? <img src={avatar} className="w-full h-full object-cover" /> : name.substring(0, 2).toUpperCase()}
-                        </div>
-                        <h3 className="text-[15px] font-semibold text-gray-900">{name}</h3>
-                      </div>
-                    )
-                  });
-                })()}
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setDeleteModal(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-80 p-5 flex flex-col animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Удалить сообщение?</h3>
+              <p className="text-sm text-gray-600 mb-5">Оно исчезнет из чата.</p>
+              
+              {deleteModal.senderEmail === currentUser.email && (
+                <label className="flex items-center gap-3 mb-5 cursor-pointer p-2 hover:bg-gray-50 rounded-xl transition-colors">
+                  <input type="checkbox" id="deleteForEveryone" className="w-4 h-4 text-red-500 rounded focus:ring-red-500" defaultChecked />
+                  <span className="text-sm font-medium text-gray-800">Удалить также для всех</span>
+                </label>
+              )}
+
+              <div className="flex gap-3 mt-auto">
+                <button onClick={() => setDeleteModal(null)} className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold rounded-xl transition-colors">Отмена</button>
+                <button onClick={() => {
+                  const forEveryone = deleteModal.senderEmail === currentUser.email ? document.getElementById('deleteForEveryone')?.checked : false;
+                  confirmDelete(forEveryone);
+                }} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors shadow-md shadow-red-500/30">Удалить</button>
               </div>
             </div>
           </div>
         </Portal>
       )}
 
-      {isRecording && recordType === 'video' && (
-         <Portal>
-           <div className="fixed top-4 right-4 md:top-8 md:right-8 z-[9999] animate-in fade-in slide-in-from-top-4 slide-in-from-right-4 duration-300">
-             <div className="absolute -inset-2 bg-red-500/40 rounded-full animate-pulse z-0"></div>
-             <video ref={(node) => { if (node && streamRef.current) node.srcObject = streamRef.current; }} autoPlay muted className="w-64 h-64 md:w-80 md:h-80 rounded-full object-cover border-4 border-red-500 shadow-2xl scale-x-[-1] relative z-10" />
-           </div>
-         </Portal>
-      )}
-
+      {/* HEADER ЧАТА */}
       <div className="flex items-center p-2.5 border-b bg-white z-10 shadow-sm">
         <button onClick={onBack} className="md:hidden p-2 mr-1 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft size={24} /></button>
-        <div className={`flex-1 ml-2 ${(chat.type === 'private' || (chat.type === 'group' && !chat.isGlobal)) ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`} onClick={handleHeaderClick}>
+        <div className={`flex-1 ml-2 ${(chat.type === 'private' || (chat.type === 'group' && !chat.isGlobal)) ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`} onClick={() => {if(chat.type==='private') setSelectedUserProfile(chat.members.find(m => m.email !== currentUser.email)); else if(chat.type==='group'&&!chat.isGlobal) setIsGroupInfoModalOpen(true);}}>
           <h2 className="font-semibold text-[17px] text-gray-900 leading-tight">{chatName}</h2>
-          <p className={`text-[13px] font-medium transition-colors ${statusText === 'в сети' ? 'text-blue-500' : 'text-gray-500'}`}>{statusText}</p>
         </div>
         <div className="flex items-center gap-1 sm:gap-2">
-           {chat.type === 'group' && !chat.isGlobal && <button onClick={() => setIsAddUserModalOpen(true)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"><UserPlus size={20} /></button>}
            {chat.type === 'private' && (
              <>
-               <button onClick={() => { const otherUser = chat.members.find(m => m.email !== currentUser.email); if (otherUser) onStartCall(otherUser, false); }} className="p-2 text-gray-500 hover:text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><Phone size={20} /></button>
-               <button onClick={() => { const otherUser = chat.members.find(m => m.email !== currentUser.email); if (otherUser) onStartCall(otherUser, true); }} className="p-2 text-gray-500 hover:text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><Video size={20} /></button>
-               <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"><MoreVertical size={20} /></button>
+               <button onClick={() => onStartCall(chat.members.find(m => m.email !== currentUser.email), false)} className="p-2 text-gray-500 hover:text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><Phone size={20} /></button>
+               <button onClick={() => onStartCall(chat.members.find(m => m.email !== currentUser.email), true)} className="p-2 text-gray-500 hover:text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><Video size={20} /></button>
              </>
            )}
         </div>
       </div>
 
+      {/* ЗОНА СООБЩЕНИЙ */}
       <div 
-        className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 relative" 
+        className="flex-1 overflow-y-auto p-4 flex flex-col relative" 
         style={{ backgroundColor: wallpaper?.bgColor || '#8ea1a5', backgroundImage: wallpaper?.bgImage || 'none', backgroundBlendMode: wallpaper?.blend || 'normal', backgroundSize: wallpaper?.bgSize || 'cover', backgroundPosition: wallpaper?.bgPos || 'center', backgroundAttachment: 'fixed' }}
       >
         {messages.map((msg) => {
           const isMe = msg.senderEmail === currentUser.email;
+          const isDeleting = deletingIds.includes(msg.id);
+          
           return (
+            // === АНИМАЦИЯ СХЛОПЫВАНИЯ УДАЛЕНИЯ ===
             <div 
               key={msg.id} 
-              onContextMenu={(e) => handleContextMenu(e, msg)}
-              className={`max-w-[85%] md:max-w-[70%] p-2.5 shadow-sm flex flex-col relative transition-all cursor-context-menu hover:shadow-md ${isMe ? 'bg-[#eeffde] self-end rounded-2xl rounded-br-none' : 'bg-white self-start rounded-2xl rounded-bl-none'}`}
+              id={`msg-wrapper-${msg.id}`}
+              className={`w-full flex ${isMe ? 'justify-end' : 'justify-start'} transition-all duration-300 ease-in-out origin-center ${isDeleting ? 'opacity-0 scale-50 h-0 m-0 overflow-hidden' : 'opacity-100 scale-100 mb-3'}`}
             >
-              {msg.isForwarded && (
-                <div 
-                  className={`flex items-center gap-1.5 text-blue-500 mb-1.5 text-xs font-medium ${msg.originalChatId ? 'cursor-pointer hover:underline' : ''}`}
-                  onClick={() => {
-                    if (msg.originalChatId) {
-                      const target = chats?.find(c => c.id === msg.originalChatId);
-                      if (target) onSwitchChat(target);
-                      else alert("Этот чат недоступен или был удален");
-                    }
-                  }}
-                >
-                  <Forward size={14} /> Переслано от {msg.forwardedFrom}
-                </div>
-              )}
+              <div 
+                onContextMenu={(e) => handleContextMenu(e, msg)}
+                className={`message-bubble max-w-[85%] md:max-w-[70%] p-2.5 shadow-sm flex flex-col relative transition-all duration-300 cursor-context-menu hover:shadow-md ${isMe ? 'bg-[#eeffde] rounded-2xl rounded-br-none' : 'bg-white rounded-2xl rounded-bl-none'}`}
+              >
+                
+                {/* ПРЕВЬЮ ОТВЕТА (Теперь красивое и кликабельное) */}
+                {msg.replyTo && (
+                  <div 
+                    onClick={() => scrollToMessage(msg.replyTo.id)}
+                    className="flex flex-col border-l-2 border-blue-500 pl-2 mb-1.5 bg-blue-500/5 hover:bg-blue-500/10 rounded-r-md py-1 cursor-pointer transition-colors"
+                  >
+                    <span className="text-blue-500 text-[12px] font-bold leading-tight">{msg.replyTo.senderName}</span>
+                    <span className="text-gray-600 text-[13px] truncate leading-tight">
+                       {msg.replyTo.preview || 'Медиасообщение'}
+                    </span>
+                  </div>
+                )}
 
-              {msg.replyTo && (
-                <div className="flex flex-col border-l-2 border-blue-500 pl-2 mb-1.5 bg-blue-500/5 rounded-r-md py-1 cursor-pointer">
-                  <span className="text-blue-500 text-[12px] font-bold leading-tight">{msg.replyTo.senderName}</span>
-                  <span className="text-gray-600 text-[13px] truncate leading-tight">{decryptText(msg.replyTo.content, secretKey)}</span>
-                </div>
-              )}
+                {/* ИМЯ ОТПРАВИТЕЛЯ (ДЛЯ ГРУПП) */}
+                {!isMe && chat.type !== 'private' && (
+                  <div className="flex items-center gap-2 mb-1.5 ml-1 cursor-pointer hover:opacity-80 transition-opacity w-fit" onClick={() => setSelectedUserProfile({ name: msg.senderName, email: msg.senderEmail, avatar: msg.senderAvatar })}>
+                     <div className="w-6 h-6 rounded-full bg-blue-100 overflow-hidden flex items-center justify-center text-[10px] text-blue-500 font-bold">{msg.senderAvatar ? <img src={msg.senderAvatar} className="w-full h-full object-cover" /> : msg.senderName.charAt(0).toUpperCase()}</div>
+                     <span className="text-[13px] font-semibold text-blue-500 hover:underline">{msg.senderName}</span>
+                  </div>
+                )}
+                
+                {msg.type === 'text' && <p className="text-[15px] px-1 text-gray-900 leading-snug break-words">{decryptText(msg.content, secretKey)}</p>}
+                {msg.type === 'image' && <ImageGallery imagesStr={JSON.stringify([msg.displayContent || msg.content])} />}
+                {msg.type === 'image_gallery' && <ImageGallery imagesStr={msg.displayContent || msg.content} />}
 
-              {!isMe && chat.type !== 'private' && (
-                <div className="flex items-center gap-2 mb-1.5 ml-1 cursor-pointer hover:opacity-80 transition-opacity w-fit" onClick={() => setSelectedUserProfile({ name: msg.senderName, email: msg.senderEmail, avatar: msg.senderAvatar })}>
-                   <div className="w-6 h-6 rounded-full bg-blue-100 overflow-hidden flex items-center justify-center text-[10px] text-blue-500 font-bold">{msg.senderAvatar ? <img src={msg.senderAvatar} className="w-full h-full object-cover" /> : msg.senderName.charAt(0).toUpperCase()}</div>
-                   <span className="text-[13px] font-semibold text-blue-500 hover:underline">{msg.senderName}</span>
+                {msg.type === 'file' && (
+                  <div className={`flex items-center gap-3 p-3 rounded-xl mt-1 ${isMe ? 'bg-[#d6f0ba]' : 'bg-gray-100'}`}>
+                    <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white flex-shrink-0"><FileText size={20} /></div>
+                    <div className="overflow-hidden"><p className="text-[14px] font-medium text-gray-900 truncate">{msg.fileName || 'Документ'}</p><p className="text-[12px] text-gray-500">Файл</p></div>
+                  </div>
+                )}
+                {msg.type === 'audio' && <TelegramAudioPlayer src={msg.displayContent || msg.content} isMe={isMe} callVolume={callVolume} />}
+                {msg.type === 'video' && <SmartVideoCircle src={msg.displayContent || msg.content} />}
+                
+                <div className="flex items-center justify-end gap-1 mt-1.5 ml-3">
+                  {msg.isEdited && <span className="text-[10px] text-gray-400 font-medium italic">изменено</span>}
+                  <span className="text-[11px] text-gray-400 font-medium">{msg.time}</span>
                 </div>
-              )}
-              
-              {msg.type === 'text' && <p className="text-[15px] px-1 text-gray-900 leading-snug break-words">{decryptText(msg.content, secretKey)}</p>}
-              {msg.type === 'image' && <ImageGallery imagesStr={JSON.stringify([msg.displayContent || msg.content])} />}
-              {msg.type === 'image_gallery' && <ImageGallery imagesStr={msg.displayContent || msg.content} />}
-
-              {msg.type === 'file' && (
-                <div className={`flex items-center gap-3 p-3 rounded-xl mt-1 ${isMe ? 'bg-[#d6f0ba]' : 'bg-gray-100'}`}>
-                  <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white flex-shrink-0"><FileText size={20} /></div>
-                  <div className="overflow-hidden"><p className="text-[14px] font-medium text-gray-900 truncate">{msg.fileName || 'Документ'}</p><p className="text-[12px] text-gray-500">Файл</p></div>
-                </div>
-              )}
-              {msg.type === 'audio' && <TelegramAudioPlayer src={msg.displayContent || msg.content} isMe={isMe} />}
-              {msg.type === 'video' && <SmartVideoCircle src={msg.displayContent || msg.content} />}
-              
-              <div className="flex items-center justify-end gap-1 mt-1.5 ml-3">
-                {msg.isEdited && <span className="text-[10px] text-gray-400 font-medium italic">изменено</span>}
-                <span className="text-[11px] text-gray-400 font-medium">{msg.time}</span>
               </div>
             </div>
           );
@@ -491,12 +443,15 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         </div>
       </div>
 
+      {/* НИЖНЯЯ ПАНЕЛЬ ВВОДА */}
       <div className="bg-white flex flex-col shadow-[0_-2px_15px_rgba(0,0,0,0.03)] z-10 relative">
         {(replyingTo || editingMessage) && (
           <div className="flex items-center justify-between bg-blue-50 border-l-2 border-blue-500 px-4 py-2 animate-in slide-in-from-bottom-2 duration-150">
             <div className="flex flex-col overflow-hidden">
               <span className="text-[12px] font-bold text-blue-500">{editingMessage ? 'Редактирование' : `Ответ для ${replyingTo.senderName}`}</span>
-              <span className="text-[13px] text-gray-600 truncate">{decryptText((editingMessage || replyingTo).content, secretKey)}</span>
+              <span className="text-[13px] text-gray-600 truncate">
+                 {editingMessage ? decryptText(editingMessage.content, secretKey) : getMediaPreview({ ...replyingTo, chatId: chat.id })}
+              </span>
             </div>
             <button onClick={() => { setReplyingTo(null); setEditingMessage(null); setInputText(''); }} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors"><X size={18} /></button>
           </div>
@@ -523,6 +478,7 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         </div>
       </div>
 
+      {/* ОСТАЛЬНЫЕ МОДАЛКИ (Профиль, Группа) */}
       {selectedUserProfile && (
         <Portal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setSelectedUserProfile(null)}>
@@ -534,80 +490,12 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
                 {selectedUserProfile.email !== currentUser.email && <button onClick={handleStartPrivateChat} className="flex flex-col items-center gap-1.5 text-blue-500 hover:text-blue-600 transition-colors group"><div className="w-12 h-12 rounded-full bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-colors"><MessageCircle size={22} className="fill-current opacity-20" /></div><span className="text-[11px] font-semibold uppercase tracking-wide">Написать</span></button>}
                 {selectedUserProfile.email !== currentUser.email && <button onClick={() => { setSelectedUserProfile(null); onStartCall(selectedUserProfile, false); }} className="flex flex-col items-center gap-1.5 text-blue-500 hover:text-blue-600 transition-colors group"><div className="w-12 h-12 rounded-full bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-colors"><Phone size={22} className="fill-current opacity-20" /></div><span className="text-[11px] font-semibold uppercase tracking-wide">Звонок</span></button>}
                 {selectedUserProfile.email !== currentUser.email && <button onClick={() => { setSelectedUserProfile(null); onStartCall(selectedUserProfile, true); }} className="flex flex-col items-center gap-1.5 text-blue-500 hover:text-blue-600 transition-colors group"><div className="w-12 h-12 rounded-full bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-colors"><Video size={22} className="fill-current opacity-20" /></div><span className="text-[11px] font-semibold uppercase tracking-wide">Видео</span></button>}
-                {selectedUserProfile.email === currentUser.email && (
-                  <>
-                    <button className="flex flex-col items-center gap-1.5 text-gray-400 opacity-60 cursor-not-allowed"><div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center"><Phone size={22} /></div><span className="text-[11px] font-semibold uppercase tracking-wide">Звонок</span></button>
-                    <button className="flex flex-col items-center gap-1.5 text-gray-400 opacity-60 cursor-not-allowed"><div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center"><Video size={22} /></div><span className="text-[11px] font-semibold uppercase tracking-wide">Видео</span></button>
-                  </>
-                )}
               </div>
             </div>
           </div>
         </Portal>
       )}
 
-      {isGroupInfoModalOpen && (
-        <Portal>
-          <div className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center" onClick={() => setIsGroupInfoModalOpen(false)}>
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200 flex flex-col" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between items-center p-4 border-b"><h2 className="text-lg font-semibold text-gray-800">Информация о группе</h2><button onClick={() => setIsGroupInfoModalOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-full"><X size={20} /></button></div>
-              <div className="p-4 max-h-[50vh] overflow-y-auto">
-                <div className="flex flex-col items-center mb-6">
-                   <div className="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-tr from-blue-400 to-blue-600 flex items-center justify-center text-white text-3xl font-bold mb-3 shadow-md">{chat.name.substring(0, 2).toUpperCase()}</div>
-                   <h3 className="text-xl font-bold text-gray-900">{chat.name}</h3><p className="text-gray-500 text-sm">{chat.members?.length || 0} участников</p>
-                </div>
-                <h4 className="text-xs font-bold text-gray-400 uppercase mb-3">Участники</h4>
-                <div className="flex flex-col gap-2">
-                  {chat.members?.map(member => {
-                     const isMe = member.email === currentUser.email;
-                     return (
-                       <div key={member.email} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-xl transition-colors group">
-                         <div className="flex items-center gap-3">
-                           <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-500 font-bold overflow-hidden">{member.avatar ? <img src={member.avatar} className="w-full h-full object-cover" /> : member.name.charAt(0).toUpperCase()}</div>
-                           <div className="flex flex-col"><div className="flex items-center gap-1.5"><span className="font-semibold text-gray-900 text-[15px]">{member.name} {isMe && '(Вы)'}</span>{member.role === 'admin' && <Shield size={12} className="text-blue-500" title="Администратор" />}</div><span className="text-xs text-gray-500">{member.email}</span></div>
-                         </div>
-                         {amIAdmin && !isMe && (
-                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                             <button onClick={() => handleUpdateRole(member.email, member.role === 'admin' ? 'member' : 'admin')} className={`p-2 rounded-full transition-colors ${member.role === 'admin' ? 'text-orange-500 hover:bg-orange-50' : 'text-blue-500 hover:bg-blue-50'}`} title={member.role === 'admin' ? 'Забрать админку' : 'Сделать админом'}>{member.role === 'admin' ? <ShieldAlert size={18} /> : <ShieldCheck size={18} />}</button>
-                             <button onClick={() => handleRemoveMember(member.email)} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Удалить из группы"><UserMinus size={18} /></button>
-                           </div>
-                         )}
-                       </div>
-                     );
-                  })}
-                </div>
-              </div>
-              {amIAdmin && (
-                <div className="p-4 border-t bg-red-50">
-                  <button onClick={handleDeleteGroup} className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors shadow-sm"><Trash2 size={18} /> Удалить группу</button>
-                </div>
-              )}
-            </div>
-          </div>
-        </Portal>
-      )}
-
-      {isAddUserModalOpen && (
-        <Portal>
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setIsAddUserModalOpen(false)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between items-center p-4 border-b"><h2 className="text-lg font-semibold text-gray-800">Добавить участника</h2><button onClick={() => setIsAddUserModalOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button></div>
-              <div className="p-2 max-h-80 overflow-y-auto">
-                {availableUsersToAdd && availableUsersToAdd.length > 0 ? (
-                  availableUsersToAdd.map((user, index) => (
-                    <div key={user.email || `fallback-${index}`} onClick={() => handleAddUserToGroup(user.email)} className="flex items-center gap-3 p-3 hover:bg-blue-50 cursor-pointer rounded-xl transition-colors">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 overflow-hidden flex items-center justify-center text-blue-500 font-bold">{user.avatar ? <img src={user.avatar} className="w-full h-full object-cover" /> : user.name.charAt(0).toUpperCase()}</div>
-                      <div><h3 className="text-[15px] font-semibold text-gray-900">{user.name}</h3><p className="text-[12px] text-gray-500">{user.email}</p></div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-6 text-center text-gray-500"><p className="text-[15px] font-semibold text-gray-700 mb-1">Нет доступных контактов</p><p className="text-sm">Вы можете добавить в группу только тех пользователей, с которыми у вас есть <span className="font-semibold text-blue-500">Личная переписка</span>.</p></div>
-                )}
-              </div>
-            </div>
-          </div>
-        </Portal>
-      )}
     </div>
   );
 }
