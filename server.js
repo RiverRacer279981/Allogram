@@ -7,7 +7,7 @@ import path from 'path';
 import crypto from 'crypto';
 
 const dev = process.env.NODE_ENV !== 'production';
-const port = process.env.PORT || 10000;
+const port = process.env.PORT || 3000;
 const hostname = process.env.HOSTNAME || '0.0.0.0';
 
 const dbPath = path.resolve('./database.json');
@@ -39,7 +39,8 @@ const blacklist = new Set();
 const LIMITS = {
   MESSAGES_PER_SECOND: 5,     
   AUTH_ATTEMPTS: 5,           
-  MAX_PAYLOAD_SIZE: 1e7       
+  // ТОТ САМЫЙ ФИКС ДЛЯ ВИДЕОКРУЖКОВ (10 Мегабайт)
+  MAX_PAYLOAD_SIZE: 10000000  
 };
 
 const isSpamming = (ip, type = 'general') => {
@@ -95,7 +96,7 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 const activeSessions = new Map();
 
-// === НОВАЯ СИСТЕМА ОЖИДАНИЯ ЗВОНКОВ ===
+// === СИСТЕМА ОЖИДАНИЯ ЗВОНКОВ (Она снова тут!) ===
 const activeCalls = new Map();
 
 app.prepare().then(() => {
@@ -141,7 +142,6 @@ app.prepare().then(() => {
       if (activeCalls.has(email)) {
         const call = activeCalls.get(email);
         socket.emit('webrtc_offer', { offer: call.offer, callerData: call.callerData, isVideo: call.isVideo, targetEmail: email });
-        // Отправляем все накопленные пакеты связи (чтобы видео заработало сразу)
         call.iceCandidates.forEach(candidate => {
            socket.emit('webrtc_ice', { candidate, targetEmail: email });
         });
@@ -154,7 +154,11 @@ app.prepare().then(() => {
       const session = activeSessions.get(socket.id);
       if (!session || !data.chatId) return;
       
-      if (data.content && data.content.length > 50000) return;
+      // Защита: пропускаем только то, что меньше лимита
+      if (data.content && data.content.length > LIMITS.MAX_PAYLOAD_SIZE) {
+        console.warn(`[WARNING] Файл слишком большой от ${session.email}`);
+        return;
+      }
 
       const messageToBroadcast = { ...data, senderEmail: session.email, senderName: session.name, senderAvatar: session.avatar };
       if (!db.messages[data.chatId]) db.messages[data.chatId] = [];
@@ -184,7 +188,7 @@ app.prepare().then(() => {
     socket.on('disconnect', () => { 
       const session = activeSessions.get(socket.id);
       if (session) {
-        // Если пользователь отключился во время дозвона, отменяем вызов
+        // Если пользователь отключился во время дозвона
         for (const [target, call] of activeCalls.entries()) {
           if (call.callerEmail === session.email) {
             activeCalls.delete(target);
@@ -207,7 +211,6 @@ app.prepare().then(() => {
     socket.on('webrtc_offer', (d) => { 
       const session = activeSessions.get(socket.id);
       if (session) {
-        // Запоминаем звонок на сервере
         activeCalls.set(d.targetEmail, { offer: d.offer, callerData: d.callerData, isVideo: d.isVideo, callerEmail: session.email, iceCandidates: [] });
       }
       for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('webrtc_offer', d); 
@@ -215,12 +218,11 @@ app.prepare().then(() => {
 
     socket.on('webrtc_answer', (d) => { 
       const session = activeSessions.get(socket.id);
-      if (session) activeCalls.delete(session.email); // Трубку взяли, удаляем из ожидания
+      if (session) activeCalls.delete(session.email); 
       for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('webrtc_answer', d); 
     });
 
     socket.on('webrtc_ice', (d) => { 
-      // Если адресат еще не зашел, копим пакеты связи
       if (activeCalls.has(d.targetEmail)) {
         activeCalls.get(d.targetEmail).iceCandidates.push(d.candidate);
       }
@@ -228,10 +230,11 @@ app.prepare().then(() => {
     });
 
     socket.on('end_call', (d) => { 
-      activeCalls.delete(d.targetEmail); // Отмена вызова
+      activeCalls.delete(d.targetEmail); 
       for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('end_call'); 
     });
   });
 
+  // ИСПРАВЛЕНИЕ ОШИБКИ 502 НА RENDER: убрано жесткое указание hostname
   httpServer.listen(port, () => console.log(`> Allogram Secure запущен на порту: ${port}`));
 });
