@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Send, Mic, Video, Paperclip, Play, Pause, FileText, X, MessageCircle, Phone, UserPlus, ChevronLeft, ChevronRight, MoreVertical, Shield, ShieldAlert, ShieldCheck, UserMinus, CornerUpRight, Pencil, Trash2, Forward, Lock, Clock, CheckCheck, Check } from 'lucide-react';
+import { ArrowLeft, Send, Mic, Video, Paperclip, Play, Pause, FileText, X, MessageCircle, Phone, UserPlus, ChevronLeft, ChevronRight, MoreVertical, Shield, ShieldAlert, ShieldCheck, UserMinus, CornerUpRight, Pencil, Forward, Lock, Clock, CheckCheck, Check } from 'lucide-react';
 
 const Portal = ({ children }) => {
   const [mounted, setMounted] = useState(false);
@@ -42,7 +42,6 @@ const TelegramAudioPlayer = ({ src, isMe, callVolume, status }) => {
   const audioRef = useRef(null);
 
   const isUploading = status === 'loading';
-
   const formatTime = (time) => { if (isNaN(time)) return "0:00"; const m = Math.floor(time / 60); const s = Math.floor(time % 60); return `${m}:${s < 10 ? '0' : ''}${s}`; };
   const togglePlay = () => { if(isUploading) return; isPlaying ? audioRef.current.pause() : audioRef.current.play(); setIsPlaying(!isPlaying); };
   const handleTimeUpdate = () => { setCurrentTime(audioRef.current.currentTime); setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100); };
@@ -79,7 +78,6 @@ const SmartVideoCircle = ({ src, status }) => {
       <div className={`w-48 h-48 sm:w-56 sm:h-56 rounded-full overflow-hidden border-2 border-white shadow-md bg-black transition-all ${isExpanded ? 'opacity-0' : 'opacity-100'} ${isUploading ? 'blur-sm scale-[1.02] cursor-default opacity-90' : 'cursor-pointer hover:shadow-lg'}`} onClick={() => !isUploading && setIsExpanded(true)}>
         <video src={src} autoPlay loop muted playsInline className="w-full h-full object-cover pointer-events-none" />
       </div>
-      
       {isUploading && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <div className="w-12 h-12 bg-black/40 rounded-full flex items-center justify-center backdrop-blur-sm shadow-lg">
@@ -87,7 +85,6 @@ const SmartVideoCircle = ({ src, status }) => {
           </div>
         </div>
       )}
-
       {isExpanded && !isUploading && (
         <Portal>
           <div className="fixed inset-0 z-[9999] pointer-events-none flex items-start justify-end md:p-8 p-4">
@@ -119,31 +116,28 @@ const ImageGallery = ({ imagesStr, status }) => {
     <div className="relative mt-1">
       <div className={`overflow-hidden ${images.length === 1 ? 'rounded-xl' : 'rounded-xl w-60 h-60 sm:w-72 sm:h-72 bg-white/20'}`}>
         {images.length === 1 && <img src={images[0]} onClick={() => openFullscreen(0)} className={singleImgClass} alt="gallery" />}
-        
         {images.length === 2 && (
           <div className="flex w-full h-full gap-0.5">
-            <img src={images[0]} onClick={() => openFullscreen(0)} className={`w-1/2 ${gridImgClass}`} alt="img1" />
-            <img src={images[1]} onClick={() => openFullscreen(1)} className={`w-1/2 ${gridImgClass}`} alt="img2" />
+             <img src={images[0]} onClick={() => openFullscreen(0)} className={`w-1/2 ${gridImgClass}`} alt="img1" />
+             <img src={images[1]} onClick={() => openFullscreen(1)} className={`w-1/2 ${gridImgClass}`} alt="img2" />
           </div>
         )}
-        
         {images.length === 3 && (
           <div className="grid grid-cols-2 grid-rows-2 w-full h-full gap-0.5">
-            <img src={images[0]} onClick={() => openFullscreen(0)} className={`col-span-2 row-span-1 ${gridImgClass}`} alt="img1" />
-            <img src={images[1]} onClick={() => openFullscreen(1)} className={gridImgClass} alt="img2" />
-            <img src={images[2]} onClick={() => openFullscreen(2)} className={gridImgClass} alt="img3" />
+             <img src={images[0]} onClick={() => openFullscreen(0)} className={`col-span-2 row-span-1 ${gridImgClass}`} alt="img1" />
+             <img src={images[1]} onClick={() => openFullscreen(1)} className={gridImgClass} alt="img2" />
+             <img src={images[2]} onClick={() => openFullscreen(2)} className={gridImgClass} alt="img3" />
           </div>
         )}
-        
         {images.length >= 4 && (
           <div className="grid grid-cols-2 grid-rows-2 w-full h-full gap-0.5">
-            <img src={images[0]} onClick={() => openFullscreen(0)} className={gridImgClass} alt="img1" />
-            <img src={images[1]} onClick={() => openFullscreen(1)} className={gridImgClass} alt="img2" />
-            <img src={images[2]} onClick={() => openFullscreen(2)} className={gridImgClass} alt="img3" />
-            <div className="relative w-full h-full cursor-pointer hover:opacity-90" onClick={() => openFullscreen(3)}>
-              <img src={images[3]} className={gridImgClass} alt="img4" />
-              {images.length > 4 && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-3xl font-bold backdrop-blur-[2px]">+{images.length - 4}</div>}
-            </div>
+             <img src={images[0]} onClick={() => openFullscreen(0)} className={gridImgClass} alt="img1" />
+             <img src={images[1]} onClick={() => openFullscreen(1)} className={gridImgClass} alt="img2" />
+             <img src={images[2]} onClick={() => openFullscreen(2)} className={gridImgClass} alt="img3" />
+             <div className="relative w-full h-full cursor-pointer hover:opacity-90" onClick={() => openFullscreen(3)}>
+               <img src={images[3]} className={gridImgClass} alt="img4" />
+               {images.length > 4 && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-3xl font-bold backdrop-blur-[2px]">+{images.length - 4}</div>}
+             </div>
           </div>
         )}
       </div>
@@ -170,6 +164,7 @@ const ImageGallery = ({ imagesStr, status }) => {
     </div>
   );
 };
+
 export default function ChatWindow({ chat, chatName, initialMessages, onBack, socket, currentUser, allUsers, chats, onSwitchChat, wallpaper, userStatuses, onStartCall, callVolume }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
@@ -226,7 +221,7 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
       
     if (unreadIds.length > 0) {
        socket.emit('mark_read', { chatId: chat.id, messageIds: unreadIds, userEmail: currentUser.email });
-       setMessages(prev => prev.map(m => unreadIds.includes(m.id) ? { ...m, readBy: [...(m.readBy||[]), currentUser.email] } : m));
+       setMessages(prev => prev.map(m => unreadIds.includes(m.id) ? { ...m, readBy: [...new Set([...(m.readBy||[]), currentUser.email])] } : m));
     }
   }, [messages, socket, chat.id, currentUser]);
 
@@ -448,24 +443,10 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
       {contextMenu && (
         <Portal>
           <div className="fixed inset-0 z-[10000]" onClick={closeContextMenu} onContextMenu={(e) => { e.preventDefault(); closeContextMenu(); }}>
-            <div 
-              className="absolute bg-white rounded-xl shadow-2xl py-1 border border-gray-100 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
-              style={{ top: contextMenu.y, left: contextMenu.x }}
-              onClick={e => e.stopPropagation()}
-            >
-              <button onClick={() => handleAction('reply')} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors">
-                <CornerUpRight size={16} className="text-gray-500" /> Ответить
-              </button>
-              {contextMenu.msg.senderEmail === currentUser.email && contextMenu.msg.type === 'text' && (
-                <button onClick={() => handleAction('edit')} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors">
-                  <Pencil size={16} className="text-gray-500" /> Изменить
-                </button>
-              )}
-              {!contextMenu.msg.isForwarded && (
-                <button onClick={() => handleAction('forward')} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors border-t border-gray-100 mt-1 pt-2">
-                  <Forward size={16} className="text-gray-500" /> Переслать
-                </button>
-              )}
+            <div className="absolute bg-white rounded-xl shadow-2xl py-1 border border-gray-100 min-w-[160px] animate-in fade-in zoom-in-95 duration-100" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={e => e.stopPropagation()}>
+              <button onClick={() => handleAction('reply')} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors"><CornerUpRight size={16} className="text-gray-500" /> Ответить</button>
+              {contextMenu.msg.senderEmail === currentUser.email && contextMenu.msg.type === 'text' && (<button onClick={() => handleAction('edit')} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors"><Pencil size={16} className="text-gray-500" /> Изменить</button>)}
+              {!contextMenu.msg.isForwarded && (<button onClick={() => handleAction('forward')} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-800 transition-colors border-t border-gray-100 mt-1 pt-2"><Forward size={16} className="text-gray-500" /> Переслать</button>)}
             </div>
           </div>
         </Portal>
@@ -475,29 +456,17 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         <Portal>
           <div className="fixed inset-0 z-[10000] bg-black/50 backdrop-blur-sm flex items-center justify-center" onClick={() => setForwardingMessage(null)}>
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between items-center p-4 border-b">
-                <h2 className="text-lg font-semibold text-gray-800">Переслать</h2>
-                <button onClick={() => setForwardingMessage(null)} className="p-1.5 hover:bg-gray-100 rounded-full"><X size={20} /></button>
-              </div>
+              <div className="flex justify-between items-center p-4 border-b"><h2 className="text-lg font-semibold text-gray-800">Переслать</h2><button onClick={() => setForwardingMessage(null)} className="p-1.5 hover:bg-gray-100 rounded-full"><X size={20} /></button></div>
               <div className="p-2 max-h-80 overflow-y-auto">
                 {(() => {
                   const availableForwardChats = chats.filter(c => c.id !== chat.id && (c.isGlobal || c.members?.some(m => m.email === currentUser.email)));
-                  if (availableForwardChats.length === 0) {
-                    return (
-                      <div className="p-6 text-center text-gray-500">
-                         <p className="text-[15px] font-semibold text-gray-700 mb-1">Нет других чатов</p>
-                         <p className="text-sm">Вам пока некому переслать это сообщение.</p>
-                      </div>
-                    );
-                  }
+                  if (availableForwardChats.length === 0) return (<div className="p-6 text-center text-gray-500"><p className="text-[15px] font-semibold text-gray-700 mb-1">Нет других чатов</p><p className="text-sm">Вам пока некому переслать это сообщение.</p></div>);
                   return availableForwardChats.map(c => {
                     const name = c.type === 'private' ? (c.members.find(m => m.email !== currentUser.email)?.name || c.name) : c.name;
                     const avatar = c.type === 'private' ? c.members.find(m => m.email !== currentUser.email)?.avatar : null;
                     return (
                       <div key={c.id} onClick={() => handleForwardSelectChat(c)} className="flex items-center gap-3 p-3 hover:bg-blue-50 cursor-pointer rounded-xl transition-colors">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-400 to-blue-600 overflow-hidden flex items-center justify-center text-white font-bold">
-                          {avatar ? <img src={avatar} className="w-full h-full object-cover" /> : name.substring(0, 2).toUpperCase()}
-                        </div>
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-400 to-blue-600 overflow-hidden flex items-center justify-center text-white font-bold">{avatar ? <img src={avatar} className="w-full h-full object-cover" /> : name.substring(0, 2).toUpperCase()}</div>
                         <h3 className="text-[15px] font-semibold text-gray-900">{name}</h3>
                       </div>
                     )
@@ -518,6 +487,7 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
          </Portal>
       )}
 
+      {/* ШАПКА - Жестко приклеена к верху */}
       <div className="flex items-center p-2.5 border-b bg-white z-20 shadow-sm flex-shrink-0">
         <button onClick={onBack} className="md:hidden p-2 mr-1 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft size={24} /></button>
         <div className={`flex-1 ml-2 ${(chat.type === 'private' || (chat.type === 'group' && !chat.isGlobal)) ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`} onClick={handleHeaderClick}>
@@ -543,91 +513,35 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         {messages.map((msg) => {
           const isMe = msg.senderEmail === currentUser.email;
           return (
-            <div 
-              key={msg.id} 
-              id={`msg-wrapper-${msg.id}`}
-              onContextMenu={(e) => handleContextMenu(e, msg)}
-              className={`max-w-[85%] md:max-w-[70%] p-2.5 shadow-sm flex flex-col relative transition-all cursor-context-menu hover:shadow-md message-bubble ${isMe ? 'bg-[#eeffde] self-end rounded-2xl rounded-br-none' : 'bg-white self-start rounded-2xl rounded-bl-none'}`}
-            >
-              {msg.isForwarded && (
-                <div 
-                  className={`flex items-center gap-1.5 text-blue-500 mb-1.5 text-xs font-medium ${msg.originalChatId ? 'cursor-pointer hover:underline' : ''}`}
-                  onClick={() => {
-                    if (msg.originalChatId) {
-                      const target = chats?.find(c => c.id === msg.originalChatId);
-                      if (target) onSwitchChat(target);
-                      else alert("Этот чат недоступен или был удален");
-                    }
-                  }}
-                >
-                  <Forward size={14} /> Переслано от {msg.forwardedFrom}
-                </div>
-              )}
-
-              {msg.replyTo && (
-                <div 
-                  onClick={() => scrollToMessage(msg.replyTo.id)}
-                  className="flex flex-col border-l-2 border-blue-500 pl-2 mb-1.5 bg-blue-500/5 hover:bg-blue-500/10 rounded-r-md py-1 cursor-pointer transition-colors"
-                >
-                  <span className="text-blue-500 text-[12px] font-bold leading-tight">{msg.replyTo.senderName}</span>
-                  <span className="text-gray-600 text-[13px] truncate leading-tight">
-                    {msg.replyTo.preview || 'Отвеченное сообщение'}
-                  </span>
-                </div>
-              )}
-
-              {!isMe && chat.type !== 'private' && (
-                <div className="flex items-center gap-2 mb-1.5 ml-1 cursor-pointer hover:opacity-80 transition-opacity w-fit" onClick={() => setSelectedUserProfile({ name: msg.senderName, email: msg.senderEmail, avatar: msg.senderAvatar })}>
-                   <div className="w-6 h-6 rounded-full bg-blue-100 overflow-hidden flex items-center justify-center text-[10px] text-blue-500 font-bold">{msg.senderAvatar ? <img src={msg.senderAvatar} className="w-full h-full object-cover" /> : msg.senderName.charAt(0).toUpperCase()}</div>
-                   <span className="text-[13px] font-semibold text-blue-500 hover:underline">{msg.senderName}</span>
-                </div>
-              )}
-              
+            <div key={msg.id} id={`msg-wrapper-${msg.id}`} onContextMenu={(e) => handleContextMenu(e, msg)} className={`max-w-[85%] md:max-w-[70%] p-2.5 shadow-sm flex flex-col relative transition-all cursor-context-menu hover:shadow-md message-bubble ${isMe ? 'bg-[#eeffde] self-end rounded-2xl rounded-br-none' : 'bg-white self-start rounded-2xl rounded-bl-none'}`}>
+              {msg.isForwarded && (<div className={`flex items-center gap-1.5 text-blue-500 mb-1.5 text-xs font-medium ${msg.originalChatId ? 'cursor-pointer hover:underline' : ''}`} onClick={() => { if (msg.originalChatId) { const target = chats?.find(c => c.id === msg.originalChatId); if (target) onSwitchChat(target); else alert("Этот чат недоступен или был удален"); } }}><Forward size={14} /> Переслано от {msg.forwardedFrom}</div>)}
+              {msg.replyTo && (<div onClick={() => scrollToMessage(msg.replyTo.id)} className="flex flex-col border-l-2 border-blue-500 pl-2 mb-1.5 bg-blue-500/5 hover:bg-blue-500/10 rounded-r-md py-1 cursor-pointer transition-colors"><span className="text-blue-500 text-[12px] font-bold leading-tight">{msg.replyTo.senderName}</span><span className="text-gray-600 text-[13px] truncate leading-tight">{msg.replyTo.preview || 'Отвеченное сообщение'}</span></div>)}
+              {!isMe && chat.type !== 'private' && (<div className="flex items-center gap-2 mb-1.5 ml-1 cursor-pointer hover:opacity-80 transition-opacity w-fit" onClick={() => setSelectedUserProfile({ name: msg.senderName, email: msg.senderEmail, avatar: msg.senderAvatar })}><div className="w-6 h-6 rounded-full bg-blue-100 overflow-hidden flex items-center justify-center text-[10px] text-blue-500 font-bold">{msg.senderAvatar ? <img src={msg.senderAvatar} className="w-full h-full object-cover" /> : msg.senderName.charAt(0).toUpperCase()}</div><span className="text-[13px] font-semibold text-blue-500 hover:underline">{msg.senderName}</span></div>)}
               {msg.type === 'text' && <p className="text-[15px] px-1 text-gray-900 leading-snug break-words">{decryptText(msg.content, secretKey)}</p>}
-              
               {msg.type === 'image' && <ImageGallery imagesStr={JSON.stringify([msg.displayContent || msg.content])} status={msg.status} />}
               {msg.type === 'image_gallery' && <ImageGallery imagesStr={msg.displayContent || msg.content} status={msg.status} />}
-
-              {msg.type === 'file' && (
-                <div className={`flex items-center gap-3 p-3 rounded-xl mt-1 transition-opacity ${isMe ? 'bg-[#d6f0ba]' : 'bg-gray-100'} ${msg.status === 'loading' ? 'opacity-60' : 'opacity-100'}`}>
-                  <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white flex-shrink-0">
-                    {msg.status === 'loading' ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <FileText size={20} />}
-                  </div>
-                  <div className="overflow-hidden"><p className="text-[14px] font-medium text-gray-900 truncate">{msg.fileName || 'Документ'}</p><p className="text-[12px] text-gray-500">Файл</p></div>
-                </div>
-              )}
-
+              {msg.type === 'file' && (<div className={`flex items-center gap-3 p-3 rounded-xl mt-1 transition-opacity ${isMe ? 'bg-[#d6f0ba]' : 'bg-gray-100'} ${msg.status === 'loading' ? 'opacity-60' : 'opacity-100'}`}><div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white flex-shrink-0">{msg.status === 'loading' ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <FileText size={20} />}</div><div className="overflow-hidden"><p className="text-[14px] font-medium text-gray-900 truncate">{msg.fileName || 'Документ'}</p><p className="text-[12px] text-gray-500">Файл</p></div></div>)}
               {msg.type === 'audio' && <TelegramAudioPlayer src={msg.displayContent || msg.content} isMe={isMe} callVolume={callVolume} status={msg.status} />}
               {msg.type === 'video' && <SmartVideoCircle src={msg.displayContent || msg.content} status={msg.status} />}
               
               <div className="flex items-center justify-end gap-1 mt-1.5 ml-3 text-[11px] text-gray-400">
                 {msg.isEdited && <span className="font-medium italic mr-1">изменено</span>}
                 <span className="font-medium">{msg.time}</span>
-                {isMe && (
-                   msg.status === 'loading' ? <Clock size={12} className="opacity-70 ml-0.5" /> : 
-                   (msg.readBy && msg.readBy.length > 0 ? <CheckCheck size={14} className="text-blue-500 ml-0.5" /> : <Check size={14} className="text-gray-400 ml-0.5" />)
-                )}
+                {isMe && (msg.status === 'loading' ? <Clock size={12} className="opacity-70 ml-0.5" /> : (msg.readBy && msg.readBy.length > 0 ? <CheckCheck size={14} className="text-blue-500 ml-0.5" /> : <Check size={14} className="text-gray-400 ml-0.5" />))}
               </div>
             </div>
           );
         })}
-        
-        <div className="mt-auto pt-8 pb-2 flex justify-center w-full">
-           <span className="text-[11px] font-medium text-gray-500/80 bg-white/50 backdrop-blur-md px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm border border-white/20">
-             <Lock size={12} className="text-gray-400/80" /> Защищено сквозным шифрованием
-           </span>
-        </div>
+        <div className="mt-auto pt-8 pb-2 flex justify-center w-full"><span className="text-[11px] font-medium text-gray-500/80 bg-white/50 backdrop-blur-md px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm border border-white/20"><Lock size={12} className="text-gray-400/80" /> Защищено сквозным шифрованием</span></div>
       </div>
 
-      {/* === ИСПРАВЛЕНИЕ: Добавлен нижний отступ pb-[env(safe-area-inset-bottom)] для iPhone === */}
+      {/* ПОДВАЛ (Поле ввода) - Жестко приклеен к низу + отступ для iPhone */}
       <div className="bg-white flex flex-col shadow-[0_-5px_20px_rgba(0,0,0,0.04)] z-20 relative flex-shrink-0 pb-[env(safe-area-inset-bottom)]">
         {(replyingTo || editingMessage) && (
           <div className="flex items-center justify-between bg-blue-50 border-l-2 border-blue-500 px-4 py-2 animate-in slide-in-from-bottom-2 duration-150">
             <div className="flex flex-col overflow-hidden">
               <span className="text-[12px] font-bold text-blue-500">{editingMessage ? 'Редактирование' : `Ответ для ${replyingTo.senderName}`}</span>
-              <span className="text-[13px] text-gray-600 truncate">
-                 {editingMessage ? decryptText(editingMessage.content, secretKey) : getMediaPreview({ ...replyingTo, chatId: chat.id })}
-              </span>
+              <span className="text-[13px] text-gray-600 truncate">{editingMessage ? decryptText(editingMessage.content, secretKey) : getMediaPreview({ ...replyingTo, chatId: chat.id })}</span>
             </div>
             <button onClick={() => { setReplyingTo(null); setEditingMessage(null); setInputText(''); }} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors"><X size={18} /></button>
           </div>
@@ -677,36 +591,21 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200 flex flex-col" onClick={e => e.stopPropagation()}>
               <div className="flex justify-between items-center p-4 border-b"><h2 className="text-lg font-semibold text-gray-800">Информация о группе</h2><button onClick={() => setIsGroupInfoModalOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-full"><X size={20} /></button></div>
               <div className="p-4 max-h-[50vh] overflow-y-auto">
-                <div className="flex flex-col items-center mb-6">
-                   <div className="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-tr from-blue-400 to-blue-600 flex items-center justify-center text-white text-3xl font-bold mb-3 shadow-md">{chat.name.substring(0, 2).toUpperCase()}</div>
-                   <h3 className="text-xl font-bold text-gray-900">{chat.name}</h3><p className="text-gray-500 text-sm">{chat.members?.length || 0} участников</p>
-                </div>
+                <div className="flex flex-col items-center mb-6"><div className="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-tr from-blue-400 to-blue-600 flex items-center justify-center text-white text-3xl font-bold mb-3 shadow-md">{chat.name.substring(0, 2).toUpperCase()}</div><h3 className="text-xl font-bold text-gray-900">{chat.name}</h3><p className="text-gray-500 text-sm">{chat.members?.length || 0} участников</p></div>
                 <h4 className="text-xs font-bold text-gray-400 uppercase mb-3">Участники</h4>
                 <div className="flex flex-col gap-2">
                   {chat.members?.map(member => {
                      const isMe = member.email === currentUser.email;
                      return (
                        <div key={member.email} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-xl transition-colors group">
-                         <div className="flex items-center gap-3">
-                           <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-500 font-bold overflow-hidden">{member.avatar ? <img src={member.avatar} className="w-full h-full object-cover" /> : member.name.charAt(0).toUpperCase()}</div>
-                           <div className="flex flex-col"><div className="flex items-center gap-1.5"><span className="font-semibold text-gray-900 text-[15px]">{member.name} {isMe && '(Вы)'}</span>{member.role === 'admin' && <Shield size={12} className="text-blue-500" title="Администратор" />}</div><span className="text-xs text-gray-500">{member.email}</span></div>
-                         </div>
-                         {amIAdmin && !isMe && (
-                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                             <button onClick={() => handleUpdateRole(member.email, member.role === 'admin' ? 'member' : 'admin')} className={`p-2 rounded-full transition-colors ${member.role === 'admin' ? 'text-orange-500 hover:bg-orange-50' : 'text-blue-500 hover:bg-blue-50'}`} title={member.role === 'admin' ? 'Забрать админку' : 'Сделать админом'}>{member.role === 'admin' ? <ShieldAlert size={18} /> : <ShieldCheck size={18} />}</button>
-                             <button onClick={() => handleRemoveMember(member.email)} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Удалить из группы"><UserMinus size={18} /></button>
-                           </div>
-                         )}
+                         <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-500 font-bold overflow-hidden">{member.avatar ? <img src={member.avatar} className="w-full h-full object-cover" /> : member.name.charAt(0).toUpperCase()}</div><div className="flex flex-col"><div className="flex items-center gap-1.5"><span className="font-semibold text-gray-900 text-[15px]">{member.name} {isMe && '(Вы)'}</span>{member.role === 'admin' && <Shield size={12} className="text-blue-500" title="Администратор" />}</div><span className="text-xs text-gray-500">{member.email}</span></div></div>
+                         {amIAdmin && !isMe && (<div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleUpdateRole(member.email, member.role === 'admin' ? 'member' : 'admin')} className={`p-2 rounded-full transition-colors ${member.role === 'admin' ? 'text-orange-500 hover:bg-orange-50' : 'text-blue-500 hover:bg-blue-50'}`}>{member.role === 'admin' ? <ShieldAlert size={18} /> : <ShieldCheck size={18} />}</button><button onClick={() => handleRemoveMember(member.email)} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"><UserMinus size={18} /></button></div>)}
                        </div>
                      );
                   })}
                 </div>
               </div>
-              {amIAdmin && (
-                <div className="p-4 border-t bg-red-50">
-                  <button onClick={handleDeleteGroup} className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors shadow-sm"><Trash2 size={18} /> Удалить группу</button>
-                </div>
-              )}
+              {amIAdmin && (<div className="p-4 border-t bg-red-50"><button onClick={handleDeleteGroup} className="w-full flex items-center justify-center gap-2 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors shadow-sm"><Trash2 size={18} /> Удалить группу</button></div>)}
             </div>
           </div>
         </Portal>
@@ -718,16 +617,7 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
               <div className="flex justify-between items-center p-4 border-b"><h2 className="text-lg font-semibold text-gray-800">Добавить участника</h2><button onClick={() => setIsAddUserModalOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button></div>
               <div className="p-2 max-h-80 overflow-y-auto">
-                {availableUsersToAdd && availableUsersToAdd.length > 0 ? (
-                  availableUsersToAdd.map((user, index) => (
-                    <div key={user.email || `fallback-${index}`} onClick={() => handleAddUserToGroup(user.email)} className="flex items-center gap-3 p-3 hover:bg-blue-50 cursor-pointer rounded-xl transition-colors">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 overflow-hidden flex items-center justify-center text-blue-500 font-bold">{user.avatar ? <img src={user.avatar} className="w-full h-full object-cover" /> : user.name.charAt(0).toUpperCase()}</div>
-                      <div><h3 className="text-[15px] font-semibold text-gray-900">{user.name}</h3><p className="text-[12px] text-gray-500">{user.email}</p></div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-6 text-center text-gray-500"><p className="text-[15px] font-semibold text-gray-700 mb-1">Нет доступных контактов</p><p className="text-sm">Вы можете добавить в группу только тех пользователей, с которыми у вас есть <span className="font-semibold text-blue-500">Личная переписка</span>.</p></div>
-                )}
+                {availableUsersToAdd && availableUsersToAdd.length > 0 ? (availableUsersToAdd.map((user, index) => (<div key={user.email || `fallback-${index}`} onClick={() => handleAddUserToGroup(user.email)} className="flex items-center gap-3 p-3 hover:bg-blue-50 cursor-pointer rounded-xl transition-colors"><div className="w-10 h-10 rounded-full bg-blue-100 overflow-hidden flex items-center justify-center text-blue-500 font-bold">{user.avatar ? <img src={user.avatar} className="w-full h-full object-cover" /> : user.name.charAt(0).toUpperCase()}</div><div><h3 className="text-[15px] font-semibold text-gray-900">{user.name}</h3><p className="text-[12px] text-gray-500">{user.email}</p></div></div>))) : (<div className="p-6 text-center text-gray-500"><p className="text-[15px] font-semibold text-gray-700 mb-1">Нет доступных контактов</p><p className="text-sm">Вы можете добавить в группу только тех пользователей, с которыми у вас есть <span className="font-semibold text-blue-500">Личная переписка</span>.</p></div>)}
               </div>
             </div>
           </div>
@@ -735,4 +625,4 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
       )}
     </div>
   );
-}}
+}
