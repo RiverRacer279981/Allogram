@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Send, Mic, Video, Paperclip, Play, Pause, FileText, X, MessageCircle, Phone, UserPlus, ChevronLeft, ChevronRight, MoreVertical, Shield, ShieldAlert, ShieldCheck, UserMinus, CornerUpRight, Pencil, Trash2, Forward, Lock } from 'lucide-react';
+import { ArrowLeft, Send, Mic, Video, Paperclip, Play, Pause, FileText, X, MessageCircle, Phone, UserPlus, ChevronLeft, ChevronRight, MoreVertical, Shield, ShieldAlert, ShieldCheck, UserMinus, CornerUpRight, Pencil, Trash2, Forward, Lock, Clock, CheckCheck } from 'lucide-react';
 
 const Portal = ({ children }) => {
   const [mounted, setMounted] = useState(false);
@@ -25,6 +25,15 @@ const decryptText = (encoded, key) => {
   } catch(e) { return encoded; }
 };
 
+const getMediaPreview = (msg) => {
+  if (!msg) return '';
+  if (msg.type === 'text') return decryptText(msg.content, `ALLOGRAM_E2EE_${msg.chatId}`);
+  if (msg.type === 'audio') return '🎤 Голосовое сообщение';
+  if (msg.type === 'video') return '📹 Видеосообщение';
+  if (msg.type === 'image' || msg.type === 'image_gallery') return '🖼️ Фотография';
+  return '📎 Файл';
+};
+
 const TelegramAudioPlayer = ({ src, isMe, callVolume }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -38,11 +47,7 @@ const TelegramAudioPlayer = ({ src, isMe, callVolume }) => {
   const handleLoadedMetadata = () => setDuration(audioRef.current.duration);
   const handleEnded = () => { setIsPlaying(false); setProgress(0); setCurrentTime(0); };
 
-  useEffect(() => {
-    if (audioRef.current && callVolume !== undefined) {
-      audioRef.current.volume = callVolume;
-    }
-  }, [callVolume]);
+  useEffect(() => { if (audioRef.current && callVolume !== undefined) audioRef.current.volume = callVolume; }, [callVolume]);
 
   return (
     <div className="flex items-center gap-3 w-64 pt-1 pb-1 px-1">
@@ -85,43 +90,62 @@ const SmartVideoCircle = ({ src }) => {
   );
 };
 
-const ImageGallery = ({ imagesStr }) => {
+// === ОБНОВЛЕННАЯ ГАЛЕРЕЯ С АНИМАЦИЕЙ И РАЗМЫТИЕМ ЗАГРУЗКИ ===
+const ImageGallery = ({ imagesStr, status }) => {
   const images = JSON.parse(imagesStr);
   const [isOpen, setIsOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-
-  const openFullscreen = (idx) => { setCurrentIndex(idx); setIsOpen(true); };
+  
+  const isUploading = status === 'loading';
+  const openFullscreen = (idx) => { if(!isUploading) { setCurrentIndex(idx); setIsOpen(true); } };
   const next = (e) => { e.stopPropagation(); setCurrentIndex(c => (c < images.length - 1 ? c + 1 : 0)); };
   const prev = (e) => { e.stopPropagation(); setCurrentIndex(c => (c > 0 ? c - 1 : images.length - 1)); };
 
+  // CSS классы для размытия и плавного появления
+  const singleImgClass = `w-full max-w-xs max-h-80 object-cover transition-all duration-700 ease-out ${isUploading ? 'blur-md scale-110 opacity-80 cursor-default' : 'cursor-pointer hover:opacity-90 blur-0 scale-100 opacity-100'}`;
+  const gridImgClass = `w-full h-full object-cover transition-all duration-700 ease-out ${isUploading ? 'blur-md scale-110 opacity-80 cursor-default' : 'cursor-pointer hover:opacity-90 blur-0 scale-100 opacity-100'}`;
+
   return (
-    <>
-      <div className={`mt-1 overflow-hidden ${images.length === 1 ? 'rounded-xl' : 'rounded-xl w-60 h-60 sm:w-72 sm:h-72 bg-white/20'}`}>
-        {images.length === 1 && <img src={images[0]} onClick={() => openFullscreen(0)} className="w-full max-w-xs max-h-80 object-cover cursor-pointer hover:opacity-90 transition-opacity" alt="gallery" />}
+    <div className="relative mt-1">
+      <div className={`overflow-hidden ${images.length === 1 ? 'rounded-xl' : 'rounded-xl w-60 h-60 sm:w-72 sm:h-72 bg-white/20'}`}>
+        {images.length === 1 && <img src={images[0]} onClick={() => openFullscreen(0)} className={singleImgClass} alt="gallery" />}
+        
         {images.length === 2 && (
           <div className="flex w-full h-full gap-0.5">
-            <img src={images[0]} onClick={() => openFullscreen(0)} className="w-1/2 h-full object-cover cursor-pointer hover:opacity-90" alt="img1" /><img src={images[1]} onClick={() => openFullscreen(1)} className="w-1/2 h-full object-cover cursor-pointer hover:opacity-90" alt="img2" />
+            <img src={images[0]} onClick={() => openFullscreen(0)} className={`w-1/2 ${gridImgClass}`} alt="img1" />
+            <img src={images[1]} onClick={() => openFullscreen(1)} className={`w-1/2 ${gridImgClass}`} alt="img2" />
           </div>
         )}
+        
         {images.length === 3 && (
           <div className="grid grid-cols-2 grid-rows-2 w-full h-full gap-0.5">
-            <img src={images[0]} onClick={() => openFullscreen(0)} className="col-span-2 row-span-1 w-full h-full object-cover cursor-pointer hover:opacity-90" alt="img1" />
-            <img src={images[1]} onClick={() => openFullscreen(1)} className="w-full h-full object-cover cursor-pointer hover:opacity-90" alt="img2" />
-            <img src={images[2]} onClick={() => openFullscreen(2)} className="w-full h-full object-cover cursor-pointer hover:opacity-90" alt="img3" />
+            <img src={images[0]} onClick={() => openFullscreen(0)} className={`col-span-2 row-span-1 ${gridImgClass}`} alt="img1" />
+            <img src={images[1]} onClick={() => openFullscreen(1)} className={gridImgClass} alt="img2" />
+            <img src={images[2]} onClick={() => openFullscreen(2)} className={gridImgClass} alt="img3" />
           </div>
         )}
+        
         {images.length >= 4 && (
           <div className="grid grid-cols-2 grid-rows-2 w-full h-full gap-0.5">
-            <img src={images[0]} onClick={() => openFullscreen(0)} className="w-full h-full object-cover cursor-pointer hover:opacity-90" alt="img1" />
-            <img src={images[1]} onClick={() => openFullscreen(1)} className="w-full h-full object-cover cursor-pointer hover:opacity-90" alt="img2" />
-            <img src={images[2]} onClick={() => openFullscreen(2)} className="w-full h-full object-cover cursor-pointer hover:opacity-90" alt="img3" />
+            <img src={images[0]} onClick={() => openFullscreen(0)} className={gridImgClass} alt="img1" />
+            <img src={images[1]} onClick={() => openFullscreen(1)} className={gridImgClass} alt="img2" />
+            <img src={images[2]} onClick={() => openFullscreen(2)} className={gridImgClass} alt="img3" />
             <div className="relative w-full h-full cursor-pointer hover:opacity-90" onClick={() => openFullscreen(3)}>
-              <img src={images[3]} className="w-full h-full object-cover" alt="img4" />
+              <img src={images[3]} className={gridImgClass} alt="img4" />
               {images.length > 4 && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-3xl font-bold backdrop-blur-[2px]">+{images.length - 4}</div>}
             </div>
           </div>
         )}
       </div>
+
+      {/* ИНДИКАТОР ЗАГРУЗКИ ПОВЕРХ РАЗМЫТОГО ФОТО */}
+      {isUploading && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className="w-12 h-12 bg-black/40 rounded-full flex items-center justify-center backdrop-blur-sm shadow-lg">
+            <div className="w-6 h-6 border-[3px] border-white/30 border-t-white rounded-full animate-spin"></div>
+          </div>
+        </div>
+      )}
 
       {isOpen && (
         <Portal>
@@ -134,7 +158,7 @@ const ImageGallery = ({ imagesStr }) => {
           </div>
         </Portal>
       )}
-    </>
+    </div>
   );
 };
 
@@ -182,7 +206,20 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
 
   useEffect(() => {
     if (!socket) return;
-    const handleReceiveMessage = (msg) => { if (msg.chatId === chat.id) setMessages((prev) => [...prev, processMessages([msg])[0]]); };
+    // === ИСПРАВЛЕНО: Умная замена фейкового сообщения загрузки на реальное ===
+    const handleReceiveMessage = (msg) => { 
+      if (msg.chatId === chat.id) { 
+        setMessages((prev) => {
+          const existsIndex = prev.findIndex(m => m.id === msg.id);
+          if (existsIndex !== -1) {
+             const newMsgs = [...prev];
+             newMsgs[existsIndex] = processMessages([msg])[0];
+             return newMsgs;
+          }
+          return [...prev, processMessages([msg])[0]];
+        }); 
+      } 
+    };
     socket.on('receive_message', handleReceiveMessage);
     return () => socket.off('receive_message', handleReceiveMessage);
   }, [socket, chat.id]);
@@ -199,7 +236,11 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
     const payloadContent = type === 'text' ? encryptText(content, secretKey) : content;
     let replyPayload = null;
     if (replyingTo) {
-      replyPayload = { id: replyingTo.id, senderName: replyingTo.senderName, content: replyingTo.type === 'text' ? replyingTo.content : (replyingTo.fileName || 'Медиафайл') };
+      replyPayload = { 
+        id: replyingTo.id, 
+        senderName: replyingTo.senderName, 
+        preview: getMediaPreview({ ...replyingTo, chatId: chat.id }) 
+      };
     }
 
     socket.emit('send_message', { chatId: chat.id, id: Date.now(), type, content: payloadContent, fileName, replyTo: replyPayload, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
@@ -207,39 +248,92 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
     setReplyingTo(null);
   };
 
+  const scrollToMessage = (id) => {
+    const el = document.getElementById(`msg-wrapper-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const bubble = el.querySelector('.message-bubble');
+      if (bubble) {
+        bubble.classList.add('brightness-90', 'scale-[1.02]');
+        setTimeout(() => bubble.classList.remove('brightness-90', 'scale-[1.02]'), 1000);
+      }
+    }
+  };
+
+  // === НОВАЯ ЛОГИКА ОПТИМИСТИЧНОЙ ЗАГРУЗКИ ФАЙЛОВ ===
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
+    
     const imageFiles = files.filter(f => f.type.startsWith('image/'));
     const otherFiles = files.filter(f => !f.type.startsWith('image/'));
 
     if (imageFiles.length > 0) {
+      const msgId = Date.now();
+      const localPreviews = imageFiles.map(file => URL.createObjectURL(file));
+      
+      // 1. Мгновенно показываем сообщение в UI (Оно будет размытым)
+      const tempMsg = {
+        id: msgId,
+        chatId: chat.id,
+        senderEmail: currentUser.email,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        type: imageFiles.length > 1 ? 'image_gallery' : 'image',
+        displayContent: imageFiles.length > 1 ? JSON.stringify(localPreviews) : localPreviews[0],
+        status: 'loading', // Флаг для анимации
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, tempMsg]);
+
+      // 2. Читаем файлы
       const imagePromises = imageFiles.map(file => new Promise(resolve => {
-        const reader = new FileReader(); reader.onloadend = () => resolve(reader.result); reader.readAsDataURL(file);
+        const reader = new FileReader(); 
+        reader.onloadend = () => resolve(reader.result); 
+        reader.readAsDataURL(file);
       }));
       const base64Images = await Promise.all(imagePromises);
-      sendMessage('image_gallery', JSON.stringify(base64Images));
+      
+      // Искусственная задержка для красоты анимации (чтобы юзер успел увидеть блюр)
+      await new Promise(res => setTimeout(res, 800));
+
+      // 3. Отправляем
+      const payloadContent = imageFiles.length > 1 ? JSON.stringify(base64Images) : base64Images[0];
+      socket.emit('send_message', { 
+        chatId: chat.id, id: msgId, type: imageFiles.length > 1 ? 'image_gallery' : 'image', content: payloadContent, time: tempMsg.time 
+      });
     }
+
+    // Для остальных файлов (документов)
     otherFiles.forEach(file => {
-      const reader = new FileReader(); reader.onloadend = () => { sendMessage('file', reader.result, file.name); }; reader.readAsDataURL(file);
+      const msgId = Date.now() + Math.random();
+      const tempMsg = {
+         id: msgId, chatId: chat.id, senderEmail: currentUser.email, senderName: currentUser.name,
+         senderAvatar: currentUser.avatar, type: 'file', fileName: file.name, status: 'loading',
+         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, tempMsg]);
+
+      const reader = new FileReader(); 
+      reader.onloadend = () => { 
+        setTimeout(() => { // Для красоты анимации
+          socket.emit('send_message', { chatId: chat.id, id: msgId, type: 'file', content: reader.result, fileName: file.name, time: tempMsg.time }); 
+        }, 800);
+      }; 
+      reader.readAsDataURL(file);
     });
+    
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleContextMenu = (e, msg) => {
     e.preventDefault();
-    const isMe = msg.senderEmail === currentUser.email;
     const menuWidth = 160; 
-    const menuHeight = 150; 
-    
-    let x = e.pageX;
-    let y = e.pageY;
-
-    if (isMe) x = e.pageX - menuWidth;
+    let x = e.pageX; let y = e.pageY;
+    if (msg.senderEmail === currentUser.email) x = e.pageX - menuWidth;
     if (x < 10) x = 10;
     if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 10;
-    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 10;
-
+    if (y + 150 > window.innerHeight) y = window.innerHeight - 150 - 10;
     setContextMenu({ x, y, msg });
   };
 
@@ -431,8 +525,9 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
           return (
             <div 
               key={msg.id} 
+              id={`msg-wrapper-${msg.id}`}
               onContextMenu={(e) => handleContextMenu(e, msg)}
-              className={`max-w-[85%] md:max-w-[70%] p-2.5 shadow-sm flex flex-col relative transition-all cursor-context-menu hover:shadow-md ${isMe ? 'bg-[#eeffde] self-end rounded-2xl rounded-br-none' : 'bg-white self-start rounded-2xl rounded-bl-none'}`}
+              className={`max-w-[85%] md:max-w-[70%] p-2.5 shadow-sm flex flex-col relative transition-all cursor-context-menu hover:shadow-md message-bubble ${isMe ? 'bg-[#eeffde] self-end rounded-2xl rounded-br-none' : 'bg-white self-start rounded-2xl rounded-bl-none'}`}
             >
               {msg.isForwarded && (
                 <div 
@@ -450,9 +545,14 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
               )}
 
               {msg.replyTo && (
-                <div className="flex flex-col border-l-2 border-blue-500 pl-2 mb-1.5 bg-blue-500/5 rounded-r-md py-1 cursor-pointer">
+                <div 
+                  onClick={() => scrollToMessage(msg.replyTo.id)}
+                  className="flex flex-col border-l-2 border-blue-500 pl-2 mb-1.5 bg-blue-500/5 hover:bg-blue-500/10 rounded-r-md py-1 cursor-pointer transition-colors"
+                >
                   <span className="text-blue-500 text-[12px] font-bold leading-tight">{msg.replyTo.senderName}</span>
-                  <span className="text-gray-600 text-[13px] truncate leading-tight">{decryptText(msg.replyTo.content, secretKey)}</span>
+                  <span className="text-gray-600 text-[13px] truncate leading-tight">
+                    {msg.replyTo.preview || 'Отвеченное сообщение'}
+                  </span>
                 </div>
               )}
 
@@ -464,21 +564,31 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
               )}
               
               {msg.type === 'text' && <p className="text-[15px] px-1 text-gray-900 leading-snug break-words">{decryptText(msg.content, secretKey)}</p>}
-              {msg.type === 'image' && <ImageGallery imagesStr={JSON.stringify([msg.displayContent || msg.content])} />}
-              {msg.type === 'image_gallery' && <ImageGallery imagesStr={msg.displayContent || msg.content} />}
+              
+              {/* === ЗАГРУЖАЕМЫЕ ИЗОБРАЖЕНИЯ === */}
+              {msg.type === 'image' && <ImageGallery imagesStr={JSON.stringify([msg.displayContent || msg.content])} status={msg.status} />}
+              {msg.type === 'image_gallery' && <ImageGallery imagesStr={msg.displayContent || msg.content} status={msg.status} />}
 
+              {/* === ЗАГРУЖАЕМЫЕ ДОКУМЕНТЫ === */}
               {msg.type === 'file' && (
-                <div className={`flex items-center gap-3 p-3 rounded-xl mt-1 ${isMe ? 'bg-[#d6f0ba]' : 'bg-gray-100'}`}>
-                  <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white flex-shrink-0"><FileText size={20} /></div>
+                <div className={`flex items-center gap-3 p-3 rounded-xl mt-1 transition-opacity ${isMe ? 'bg-[#d6f0ba]' : 'bg-gray-100'} ${msg.status === 'loading' ? 'opacity-60' : 'opacity-100'}`}>
+                  <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white flex-shrink-0">
+                    {msg.status === 'loading' ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <FileText size={20} />}
+                  </div>
                   <div className="overflow-hidden"><p className="text-[14px] font-medium text-gray-900 truncate">{msg.fileName || 'Документ'}</p><p className="text-[12px] text-gray-500">Файл</p></div>
                 </div>
               )}
+
               {msg.type === 'audio' && <TelegramAudioPlayer src={msg.displayContent || msg.content} isMe={isMe} callVolume={callVolume} />}
               {msg.type === 'video' && <SmartVideoCircle src={msg.displayContent || msg.content} />}
               
-              <div className="flex items-center justify-end gap-1 mt-1.5 ml-3">
-                {msg.isEdited && <span className="text-[10px] text-gray-400 font-medium italic">изменено</span>}
-                <span className="text-[11px] text-gray-400 font-medium">{msg.time}</span>
+              {/* === ЧАСИКИ ИЛИ ГАЛОЧКИ === */}
+              <div className="flex items-center justify-end gap-1 mt-1.5 ml-3 text-[11px] text-gray-400">
+                {msg.isEdited && <span className="font-medium italic mr-1">изменено</span>}
+                <span className="font-medium">{msg.time}</span>
+                {isMe && (
+                   msg.status === 'loading' ? <Clock size={12} className="opacity-70 ml-0.5" /> : <CheckCheck size={14} className="text-blue-500 ml-0.5" />
+                )}
               </div>
             </div>
           );
@@ -496,7 +606,9 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
           <div className="flex items-center justify-between bg-blue-50 border-l-2 border-blue-500 px-4 py-2 animate-in slide-in-from-bottom-2 duration-150">
             <div className="flex flex-col overflow-hidden">
               <span className="text-[12px] font-bold text-blue-500">{editingMessage ? 'Редактирование' : `Ответ для ${replyingTo.senderName}`}</span>
-              <span className="text-[13px] text-gray-600 truncate">{decryptText((editingMessage || replyingTo).content, secretKey)}</span>
+              <span className="text-[13px] text-gray-600 truncate">
+                 {editingMessage ? decryptText(editingMessage.content, secretKey) : getMediaPreview({ ...replyingTo, chatId: chat.id })}
+              </span>
             </div>
             <button onClick={() => { setReplyingTo(null); setEditingMessage(null); setInputText(''); }} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors"><X size={18} /></button>
           </div>
