@@ -7,7 +7,7 @@ import path from 'path';
 import crypto from 'crypto';
 
 const dev = process.env.NODE_ENV !== 'production';
-const port = process.env.PORT || 10000;
+const port = process.env.PORT || 3000;
 const hostname = process.env.HOSTNAME || '0.0.0.0';
 
 const dbPath = path.resolve('./database.json');
@@ -39,7 +39,6 @@ const blacklist = new Set();
 const LIMITS = {
   MESSAGES_PER_SECOND: 5,     
   AUTH_ATTEMPTS: 5,           
-  // ТОТ САМЫЙ ФИКС ДЛЯ ВИДЕОКРУЖКОВ (10 Мегабайт)
   MAX_PAYLOAD_SIZE: 10000000  
 };
 
@@ -62,7 +61,7 @@ const isSpamming = (ip, type = 'general') => {
   const limit = type === 'auth' ? LIMITS.AUTH_ATTEMPTS : LIMITS.MESSAGES_PER_SECOND;
   
   if (userData.count > limit) {
-    console.warn(`[SECURITY] Блокировка ${type} для IP: ${ip} (Превышен лимит)`);
+    console.warn(`[SECURITY] Блокировка ${type} для IP: ${ip}`);
     if (userData.count > limit * 3) { 
         blacklist.add(ip);
         setTimeout(() => blacklist.delete(ip), 3600000); 
@@ -95,8 +94,6 @@ const saveDB = () => {
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 const activeSessions = new Map();
-
-// === СИСТЕМА ОЖИДАНИЯ ЗВОНКОВ (Она снова тут!) ===
 const activeCalls = new Map();
 
 app.prepare().then(() => {
@@ -121,7 +118,7 @@ app.prepare().then(() => {
 
     socket.use(([event, data], next) => {
       if (isSpamming(clientIp, event === 'login' || event === 'register' ? 'auth' : 'general')) {
-        return next(new Error('Rate limit exceeded. Try again later.'));
+        return next(new Error('Rate limit exceeded'));
       }
       next();
     });
@@ -138,7 +135,6 @@ app.prepare().then(() => {
       activeSessions.set(socket.id, { email, name: user.name, avatar: user.avatar, activeChat: null });
       sendInitData(); 
       
-      // === ПРОВЕРКА ПРОПУЩЕННЫХ ВЫЗОВОВ ПРИ ВХОДЕ ===
       if (activeCalls.has(email)) {
         const call = activeCalls.get(email);
         socket.emit('webrtc_offer', { offer: call.offer, callerData: call.callerData, isVideo: call.isVideo, targetEmail: email });
@@ -154,17 +150,32 @@ app.prepare().then(() => {
       const session = activeSessions.get(socket.id);
       if (!session || !data.chatId) return;
       
-      // Защита: пропускаем только то, что меньше лимита
-      if (data.content && data.content.length > LIMITS.MAX_PAYLOAD_SIZE) {
-        console.warn(`[WARNING] Файл слишком большой от ${session.email}`);
-        return;
-      }
+      if (data.content && data.content.length > LIMITS.MAX_PAYLOAD_SIZE) return;
 
-      const messageToBroadcast = { ...data, senderEmail: session.email, senderName: session.name, senderAvatar: session.avatar };
+      // НОВОЕ: Добавляем пустой массив readBy (никто еще не прочитал)
+      const messageToBroadcast = { ...data, senderEmail: session.email, senderName: session.name, senderAvatar: session.avatar, readBy: [] };
       if (!db.messages[data.chatId]) db.messages[data.chatId] = [];
       db.messages[data.chatId].push(messageToBroadcast);
       saveDB();
       io.emit('receive_message', messageToBroadcast);
+    });
+
+    // === НОВОЕ: Обработчик прочтения сообщений ===
+    socket.on('mark_read', ({ chatId, messageIds, userEmail }) => {
+      if (!db.messages[chatId]) return;
+      let updated = false;
+      messageIds.forEach(id => {
+        const msg = db.messages[chatId].find(m => m.id === id);
+        if (msg && (!msg.readBy || !msg.readBy.includes(userEmail))) {
+          if (!msg.readBy) msg.readBy = [];
+          msg.readBy.push(userEmail);
+          updated = true;
+        }
+      });
+      if (updated) {
+        saveDB();
+        io.emit('messages_read', { chatId, messageIds, userEmail });
+      }
     });
 
     socket.on('edit_message', ({ chatId, msgId, newContent, requesterEmail }) => {
@@ -184,11 +195,9 @@ app.prepare().then(() => {
     });
 
     socket.on('logout', () => activeSessions.delete(socket.id));
-    
     socket.on('disconnect', () => { 
       const session = activeSessions.get(socket.id);
       if (session) {
-        // Если пользователь отключился во время дозвона
         for (const [target, call] of activeCalls.entries()) {
           if (call.callerEmail === session.email) {
             activeCalls.delete(target);
@@ -207,12 +216,9 @@ app.prepare().then(() => {
         db.chats.push(n); db.messages[n.id] = []; saveDB(); io.emit('chat_updated', n);
     });
 
-    // === ОБРАБОТКА ЗВОНКОВ В РЕАЛЬНОМ ВРЕМЕНИ И ОЖИДАНИИ ===
     socket.on('webrtc_offer', (d) => { 
       const session = activeSessions.get(socket.id);
-      if (session) {
-        activeCalls.set(d.targetEmail, { offer: d.offer, callerData: d.callerData, isVideo: d.isVideo, callerEmail: session.email, iceCandidates: [] });
-      }
+      if (session) activeCalls.set(d.targetEmail, { offer: d.offer, callerData: d.callerData, isVideo: d.isVideo, callerEmail: session.email, iceCandidates: [] });
       for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('webrtc_offer', d); 
     });
 
@@ -223,9 +229,7 @@ app.prepare().then(() => {
     });
 
     socket.on('webrtc_ice', (d) => { 
-      if (activeCalls.has(d.targetEmail)) {
-        activeCalls.get(d.targetEmail).iceCandidates.push(d.candidate);
-      }
+      if (activeCalls.has(d.targetEmail)) activeCalls.get(d.targetEmail).iceCandidates.push(d.candidate);
       for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('webrtc_ice', d); 
     });
 
@@ -235,6 +239,5 @@ app.prepare().then(() => {
     });
   });
 
-  // ИСПРАВЛЕНИЕ ОШИБКИ 502 НА RENDER: убрано жесткое указание hostname
   httpServer.listen(port, () => console.log(`> Allogram Secure запущен на порту: ${port}`));
 });
