@@ -170,7 +170,6 @@ const ImageGallery = ({ imagesStr, status }) => {
     </div>
   );
 };
-
 export default function ChatWindow({ chat, chatName, initialMessages, onBack, socket, currentUser, allUsers, chats, onSwitchChat, wallpaper, userStatuses, onStartCall, callVolume }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
@@ -211,7 +210,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
     return msg;
   });
 
-  // === ИСПРАВЛЕНИЕ: Бережно сливаем новые сообщения с теми, что сейчас анимируются ===
   useEffect(() => { 
     setMessages(prev => {
       const processed = processMessages(initialMessages);
@@ -445,7 +443,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
   const amIAdmin = chat.members?.find(m => m.email === currentUser.email)?.role === 'admin';
 
   return (
-    // === ИСПРАВЛЕНИЕ: w-full overflow-hidden чтобы шапка и подвал не съезжали ===
     <div className="flex flex-col w-full h-full flex-1 relative font-sans overflow-hidden bg-white">
       
       {contextMenu && (
@@ -521,7 +518,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
          </Portal>
       )}
 
-      {/* === ИСПРАВЛЕНИЕ: flex-shrink-0 чтобы шапка не исчезала === */}
       <div className="flex items-center p-2.5 border-b bg-white z-20 shadow-sm flex-shrink-0">
         <button onClick={onBack} className="md:hidden p-2 mr-1 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft size={24} /></button>
         <div className={`flex-1 ml-2 ${(chat.type === 'private' || (chat.type === 'group' && !chat.isGlobal)) ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`} onClick={handleHeaderClick}>
@@ -623,8 +619,8 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         </div>
       </div>
 
-      {/* === ИСПРАВЛЕНИЕ: flex-shrink-0 чтобы подвал ввода не исчезал === */}
-      <div className="bg-white flex flex-col shadow-[0_-5px_20px_rgba(0,0,0,0.04)] z-20 relative flex-shrink-0">
+      {/* === ИСПРАВЛЕНИЕ: Добавлен нижний отступ pb-[env(safe-area-inset-bottom)] для iPhone === */}
+      <div className="bg-white flex flex-col shadow-[0_-5px_20px_rgba(0,0,0,0.04)] z-20 relative flex-shrink-0 pb-[env(safe-area-inset-bottom)]">
         {(replyingTo || editingMessage) && (
           <div className="flex items-center justify-between bg-blue-50 border-l-2 border-blue-500 px-4 py-2 animate-in slide-in-from-bottom-2 duration-150">
             <div className="flex flex-col overflow-hidden">
@@ -642,7 +638,7 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
           <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple />
           
           <div className="flex-1 bg-[#f4f4f5] rounded-2xl border border-transparent focus-within:border-blue-200 focus-within:bg-white transition-colors flex items-center mb-1">
-            <textarea id="chat-input" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Написать сообщение..." className="w-full bg-transparent py-3 px-4 outline-none resize-none text-[15px] max-h-32 min-h-[48px]" rows={1} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage('text', inputText); } }} />
+            <textarea id="chat-input" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Написать сообщение..." className="w-full bg-transparent py-3 px-4 outline-none resize-none text-[16px] max-h-32 min-h-[48px]" rows={1} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage('text', inputText); } }} />
           </div>
           
           {editingMessage ? (
@@ -739,4 +735,4 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
       )}
     </div>
   );
-}
+}}
