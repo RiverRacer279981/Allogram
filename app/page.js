@@ -7,17 +7,16 @@ import { Search, Menu, ArrowLeft, Camera, LogOut, X, User, Settings, Edit, Palet
 
 const DEFAULT_WALLPAPER = { bgColor: '#8ea1a5', bgImage: 'url("https://web.telegram.org/a/chat-bg-pattern-light.ee148af944f6580293ae.png")', bgSize: 'cover', bgPos: 'center', blend: 'overlay' };
 
-// === НОВОЕ: СПИСОК ОБОЕВ КАК В TELEGRAM ===
 const WALLPAPER_PRESETS = [
-  DEFAULT_WALLPAPER, // Классический светлый
-  { bgColor: '#0f172a', bgImage: 'url("https://web.telegram.org/a/chat-bg-pattern-light.ee148af944f6580293ae.png")', bgSize: 'cover', bgPos: 'center', blend: 'overlay' }, // Темный паттерн
-  { bgColor: '#428bb8', bgImage: 'url("https://web.telegram.org/a/chat-bg-pattern-light.ee148af944f6580293ae.png")', bgSize: 'cover', bgPos: 'center', blend: 'overlay' }, // Синий паттерн
-  { bgColor: '#1e293b', bgImage: 'none', bgSize: 'cover', bgPos: 'center', blend: 'normal' }, // Сплошной темный
-  { bgColor: '#000000', bgImage: 'none', bgSize: 'cover', bgPos: 'center', blend: 'normal' }, // Сплошной черный (AMOLED)
-  { bgColor: 'transparent', bgImage: 'linear-gradient(to top right, #a1c4fd, #c2e9fb)', bgSize: 'cover', bgPos: 'center', blend: 'normal' }, // Светлый градиент
-  { bgColor: 'transparent', bgImage: 'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)', bgSize: 'cover', bgPos: 'center', blend: 'normal' }, // Фиолетовый градиент
-  { bgColor: 'transparent', bgImage: 'linear-gradient(to right, #4facfe 0%, #00f2fe 100%)', bgSize: 'cover', bgPos: 'center', blend: 'normal' }, // Насыщенный синий
-  { bgColor: 'transparent', bgImage: 'linear-gradient(to top, #09203f 0%, #537895 100%)', bgSize: 'cover', bgPos: 'center', blend: 'normal' } // Глубокий космос
+  DEFAULT_WALLPAPER,
+  { bgColor: '#0f172a', bgImage: 'url("https://web.telegram.org/a/chat-bg-pattern-light.ee148af944f6580293ae.png")', bgSize: 'cover', bgPos: 'center', blend: 'overlay' },
+  { bgColor: '#428bb8', bgImage: 'url("https://web.telegram.org/a/chat-bg-pattern-light.ee148af944f6580293ae.png")', bgSize: 'cover', bgPos: 'center', blend: 'overlay' },
+  { bgColor: '#1e293b', bgImage: 'none', bgSize: 'cover', bgPos: 'center', blend: 'normal' },
+  { bgColor: '#000000', bgImage: 'none', bgSize: 'cover', bgPos: 'center', blend: 'normal' },
+  { bgColor: 'transparent', bgImage: 'linear-gradient(to top right, #a1c4fd, #c2e9fb)', bgSize: 'cover', bgPos: 'center', blend: 'normal' },
+  { bgColor: 'transparent', bgImage: 'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)', bgSize: 'cover', bgPos: 'center', blend: 'normal' },
+  { bgColor: 'transparent', bgImage: 'linear-gradient(to right, #4facfe 0%, #00f2fe 100%)', bgSize: 'cover', bgPos: 'center', blend: 'normal' },
+  { bgColor: 'transparent', bgImage: 'linear-gradient(to top, #09203f 0%, #537895 100%)', bgSize: 'cover', bgPos: 'center', blend: 'normal' }
 ];
 
 export default function AllogramApp() {
@@ -294,7 +293,6 @@ export default function AllogramApp() {
   return (
     <div className="flex h-screen bg-white overflow-hidden text-black font-sans relative animate-in fade-in duration-500">
       
-      {/* ПАНЕЛЬ НАСТРОЕК */}
       <div className={`absolute top-0 left-0 h-full w-[350px] bg-white z-40 shadow-2xl transform transition-transform duration-300 ease-in-out ${isSettingsOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="bg-gradient-to-tr from-blue-500 to-blue-600 h-40 p-4 flex flex-col justify-between text-white">
           <button onClick={() => setIsSettingsOpen(false)} className="self-start p-2 hover:bg-white/20 rounded-full transition-colors"><ArrowLeft size={24} /></button>
@@ -313,7 +311,6 @@ export default function AllogramApp() {
 
       {isSettingsOpen && <div onClick={() => setIsSettingsOpen(false)} className="absolute inset-0 bg-black/30 z-30 transition-opacity"></div>}
 
-      {/* МОДАЛКИ НАСТРОЕК */}
       {isSettingsModalOpen && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity" onClick={closeSettings}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
@@ -339,13 +336,11 @@ export default function AllogramApp() {
               </div>
             )}
 
-            {/* === ИЗМЕНЕННАЯ СЕКЦИЯ ПЕРСОНАЛИЗАЦИИ С ПРЕСЕТАМИ === */}
             {settingsView === 'personalization' && (
               <div className="p-5 animate-in slide-in-from-right-4 duration-200">
                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                   <div className="flex items-center gap-2 mb-3 text-purple-500"><Palette size={20} /><h4 className="text-[15px] font-semibold text-gray-800">Обои чата</h4></div>
                   
-                  {/* Сетка пресетов */}
                   <div className="grid grid-cols-3 gap-3 max-h-60 overflow-y-auto p-1 scrollbar-hide">
                     {WALLPAPER_PRESETS.map((preset, idx) => (
                       <div 
@@ -391,7 +386,6 @@ export default function AllogramApp() {
         </div>
       )}
 
-      {/* МОДАЛКИ ПРОФИЛЕЙ И СОЗДАНИЯ */}
       {isProfileModalOpen && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -421,7 +415,9 @@ export default function AllogramApp() {
 
       {callState !== 'idle' && callInfo && (
         <div className="fixed inset-0 z-[10000] bg-gray-900 flex flex-col justify-between items-center py-10 animate-in fade-in zoom-in duration-300 overflow-hidden">
+          
           <audio ref={node => { if (node) { node.volume = callVolume; if (remoteStream && !callInfo.isVideo && node.srcObject !== remoteStream) node.srcObject = remoteStream; } }} autoPlay />
+          
           {callInfo.isVideo && (
             <>
               {remoteStream && callState === 'active' ? (
@@ -434,29 +430,41 @@ export default function AllogramApp() {
                   <video ref={node => { if (node && localStreamRef.current) node.srcObject = localStreamRef.current }} autoPlay muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
                 </div>
               )}
-              <div className="absolute inset-0 bg-black/50 pointer-events-none z-10" />
+              {callState !== 'active' && <div className="absolute inset-0 bg-black/50 pointer-events-none z-10" />}
             </>
           )}
+
           <div className="z-20 pt-4 px-4 w-full flex justify-center">
             <div className="px-5 py-1.5 bg-white/10 border border-white/20 rounded-full text-white/90 text-xs font-bold tracking-widest uppercase shadow-lg backdrop-blur-md">
               {callInfo.isVideo ? 'Видеозвонок' : 'Аудиозвонок'}
             </div>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center z-20 w-full px-4 text-white pb-10">
-             {!callInfo.isVideo && (
-               <div className="w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden bg-gradient-to-tr from-blue-400 to-blue-600 mb-6 flex items-center justify-center text-6xl font-bold shadow-[0_0_80px_rgba(59,130,246,0.3)] animate-pulse">
-                 {callInfo.avatar ? <img src={callInfo.avatar} className="w-full h-full object-cover" /> : callInfo.name.charAt(0).toUpperCase()}
+
+          {!(callInfo.isVideo && callState === 'active') && (
+            <div className="flex-1 flex flex-col items-center justify-center z-20 w-full px-4 text-white pb-10">
+               {!callInfo.isVideo && (
+                 <div className="w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden bg-gradient-to-tr from-blue-400 to-blue-600 mb-6 flex items-center justify-center text-5xl md:text-6xl font-bold shadow-[0_0_80px_rgba(59,130,246,0.3)] animate-pulse">
+                   {callInfo.avatar ? <img src={callInfo.avatar} className="w-full h-full object-cover" /> : callInfo.name.charAt(0).toUpperCase()}
+                 </div>
+               )}
+               
+               <h2 className="text-3xl md:text-4xl font-bold mb-3 drop-shadow-lg text-center">{callInfo.name}</h2>
+               
+               <div className="flex items-center gap-1.5 text-[11px] md:text-[12px] font-medium text-green-400 bg-green-500/10 px-4 py-1.5 rounded-full border border-green-500/20 mb-6 shadow-sm backdrop-blur-md">
+                 <Lock size={14} /> Защищено сквозным шифрованием
                </div>
-             )}
-             <h2 className="text-3xl md:text-4xl font-bold mb-3 drop-shadow-lg text-center">{callInfo.name}</h2>
-             <div className="flex items-center gap-1.5 text-[11px] md:text-[12px] font-medium text-green-400 bg-green-500/10 px-4 py-1.5 rounded-full border border-green-500/20 mb-6 shadow-sm backdrop-blur-md">
-               <Lock size={14} /> Защищено сквозным шифрованием
-             </div>
-             <p className="text-blue-400 text-lg tracking-wide animate-pulse drop-shadow-md font-medium">
-               {callState === 'calling' ? 'Вызов...' : callState === 'receiving' ? 'Входящий вызов...' : 'Соединение установлено'}
-             </p>
-          </div>
-          <div className="w-full flex justify-center gap-10 z-20 pb-6">
+
+               <p className="text-blue-400 text-lg md:text-xl tracking-wide animate-pulse drop-shadow-md font-medium">
+                 {callState === 'calling' ? 'Вызов...' : callState === 'receiving' ? 'Входящий вызов...' : 'Соединение установлено'}
+               </p>
+            </div>
+          )}
+
+          {(callInfo.isVideo && callState === 'active') && (
+             <div className="flex-1 pointer-events-none z-10"></div>
+          )}
+
+          <div className="w-full flex justify-center gap-8 md:gap-12 z-20 pb-6">
             {callState === 'receiving' && (
               <button onClick={acceptCall} className="w-16 h-16 md:w-20 md:h-20 bg-green-500 rounded-full flex items-center justify-center hover:bg-green-600 transition-transform active:scale-95 shadow-[0_0_40px_rgba(34,197,94,0.5)]">
                 {callInfo.isVideo ? <VideoIcon size={28} className="text-white fill-current md:w-8 md:h-8" /> : <Phone size={28} className="text-white fill-current md:w-8 md:h-8" />}
@@ -466,10 +474,10 @@ export default function AllogramApp() {
               <PhoneOff size={28} className="text-white md:w-8 md:h-8" />
             </button>
           </div>
+
         </div>
       )}
 
-      {/* ЛЕВАЯ ПАНЕЛЬ СО СПИСКОМ ЧАТОВ */}
       <div className={`w-full md:w-[350px] border-r border-gray-200 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'} z-20`}>
         <div className="flex items-center p-3 gap-2"><button onClick={() => setIsSettingsOpen(true)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><Menu className="text-gray-500" /></button><div className="flex-1 bg-[#f4f4f5] rounded-full flex items-center px-4 py-2 transition-colors focus-within:bg-gray-100"><Search size={18} className="text-gray-400 mr-2" /><input type="text" placeholder="Поиск" className="bg-transparent border-none outline-none w-full text-[15px]" /></div></div>
         <div className="flex-1 overflow-y-auto relative">
@@ -486,7 +494,6 @@ export default function AllogramApp() {
         </div>
       </div>
 
-      {/* ПРАВАЯ ПАНЕЛЬ ЧАТА */}
       <div className={`flex-1 flex flex-col ${!activeChat ? 'hidden md:flex' : 'flex'} z-10`}>
         {activeChat && socket ? (
           <ChatWindow 
