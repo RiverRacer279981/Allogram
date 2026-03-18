@@ -7,7 +7,7 @@ import path from 'path';
 import crypto from 'crypto';
 
 const dev = process.env.NODE_ENV !== 'production';
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 10000;
 const hostname = process.env.HOSTNAME || '0.0.0.0';
 
 const dbPath = path.resolve('./database.json');
