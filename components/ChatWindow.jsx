@@ -34,7 +34,6 @@ const getMediaPreview = (msg) => {
   return '📎 Файл';
 };
 
-// === ОБНОВЛЕННЫЙ АУДИОПЛЕЕР С АНИМАЦИЕЙ ===
 const TelegramAudioPlayer = ({ src, isMe, callVolume, status }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -72,7 +71,6 @@ const TelegramAudioPlayer = ({ src, isMe, callVolume, status }) => {
   );
 };
 
-// === ОБНОВЛЕННЫЙ ВИДЕОКРУЖОК С АНИМАЦИЕЙ ===
 const SmartVideoCircle = ({ src, status }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const isUploading = status === 'loading';
@@ -213,41 +211,15 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
     return msg;
   });
 
-  useEffect(() => { setMessages(processMessages(initialMessages)); }, [chat.id, initialMessages]);
+  // === ИСПРАВЛЕНИЕ: Бережно сливаем новые сообщения с теми, что сейчас анимируются ===
+  useEffect(() => { 
+    setMessages(prev => {
+      const processed = processMessages(initialMessages);
+      const loading = prev.filter(m => m.status === 'loading');
+      return [...processed, ...loading.filter(l => !processed.some(p => p.id === l.id))].sort((a,b) => a.id - b.id);
+    }); 
+  }, [chat.id, initialMessages]);
 
-  useEffect(() => {
-    if (!socket) return;
-    
-    const handleReceiveMessage = (msg) => { 
-      if (msg.chatId === chat.id) { 
-        setMessages((prev) => {
-          const existsIndex = prev.findIndex(m => m.id === msg.id);
-          if (existsIndex !== -1) {
-             const newMsgs = [...prev];
-             newMsgs[existsIndex] = processMessages([msg])[0];
-             return newMsgs;
-          }
-          return [...prev, processMessages([msg])[0]];
-        }); 
-      } 
-    };
-
-    // === НОВОЕ: Обработчик получения сигнала о прочтении ===
-    const handleMessagesRead = ({ chatId: readChatId, messageIds, userEmail }) => {
-      if (readChatId === chat.id) {
-        setMessages(prev => prev.map(m => messageIds.includes(m.id) && m.senderEmail !== userEmail ? { ...m, readBy: [...new Set([...(m.readBy||[]), userEmail])] } : m));
-      }
-    };
-
-    socket.on('receive_message', handleReceiveMessage);
-    socket.on('messages_read', handleMessagesRead);
-    return () => {
-      socket.off('receive_message', handleReceiveMessage);
-      socket.off('messages_read', handleMessagesRead);
-    }
-  }, [socket, chat.id]);
-
-  // === НОВОЕ: Автоматически помечаем непрочитанные сообщения как прочитанные ===
   useEffect(() => {
     if (!socket || !chat.id || !currentUser || messages.length === 0) return;
     const unreadIds = messages
@@ -256,7 +228,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
       
     if (unreadIds.length > 0) {
        socket.emit('mark_read', { chatId: chat.id, messageIds: unreadIds, userEmail: currentUser.email });
-       // Сразу обновляем у себя локально, чтобы не спамить сервер
        setMessages(prev => prev.map(m => unreadIds.includes(m.id) ? { ...m, readBy: [...(m.readBy||[]), currentUser.email] } : m));
     }
   }, [messages, socket, chat.id, currentUser]);
@@ -422,7 +393,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
     else if (chat.type === 'group' && !chat.isGlobal) setIsGroupInfoModalOpen(true);
   };
 
-  // === НОВОЕ: АНИМАЦИЯ И ОПТИМИСТИЧНАЯ ЗАГРУЗКА АУДИО И ВИДЕО ===
   const startRecording = async (type) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
@@ -436,7 +406,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         
         const blob = new Blob(chunksRef.current, { type: type === 'video' ? 'video/webm' : 'audio/webm' });
         
-        // 1. Показываем в чате моментально (с анимацией загрузки)
         const localUrl = URL.createObjectURL(blob);
         const msgId = Date.now();
         const tempMsg = {
@@ -446,7 +415,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         };
         setMessages(prev => [...prev, tempMsg]);
 
-        // 2. Конвертируем и отправляем с задержкой (чтобы видеть анимацию)
         const reader = new FileReader(); 
         reader.onloadend = () => { 
           setTimeout(() => { 
@@ -477,7 +445,8 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
   const amIAdmin = chat.members?.find(m => m.email === currentUser.email)?.role === 'admin';
 
   return (
-    <div className="flex flex-col h-full relative font-sans">
+    // === ИСПРАВЛЕНИЕ: w-full overflow-hidden чтобы шапка и подвал не съезжали ===
+    <div className="flex flex-col w-full h-full flex-1 relative font-sans overflow-hidden bg-white">
       
       {contextMenu && (
         <Portal>
@@ -552,7 +521,8 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
          </Portal>
       )}
 
-      <div className="flex items-center p-2.5 border-b bg-white z-10 shadow-sm">
+      {/* === ИСПРАВЛЕНИЕ: flex-shrink-0 чтобы шапка не исчезала === */}
+      <div className="flex items-center p-2.5 border-b bg-white z-20 shadow-sm flex-shrink-0">
         <button onClick={onBack} className="md:hidden p-2 mr-1 rounded-full hover:bg-gray-100 transition-colors"><ArrowLeft size={24} /></button>
         <div className={`flex-1 ml-2 ${(chat.type === 'private' || (chat.type === 'group' && !chat.isGlobal)) ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`} onClick={handleHeaderClick}>
           <h2 className="font-semibold text-[17px] text-gray-900 leading-tight">{chatName}</h2>
@@ -571,7 +541,7 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
       </div>
 
       <div 
-        className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 relative" 
+        className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 relative z-0" 
         style={{ backgroundColor: wallpaper?.bgColor || '#8ea1a5', backgroundImage: wallpaper?.bgImage || 'none', backgroundBlendMode: wallpaper?.blend || 'normal', backgroundSize: wallpaper?.bgSize || 'cover', backgroundPosition: wallpaper?.bgPos || 'center', backgroundAttachment: 'fixed' }}
       >
         {messages.map((msg) => {
@@ -634,7 +604,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
               {msg.type === 'audio' && <TelegramAudioPlayer src={msg.displayContent || msg.content} isMe={isMe} callVolume={callVolume} status={msg.status} />}
               {msg.type === 'video' && <SmartVideoCircle src={msg.displayContent || msg.content} status={msg.status} />}
               
-              {/* === УМНЫЕ ГАЛОЧКИ === */}
               <div className="flex items-center justify-end gap-1 mt-1.5 ml-3 text-[11px] text-gray-400">
                 {msg.isEdited && <span className="font-medium italic mr-1">изменено</span>}
                 <span className="font-medium">{msg.time}</span>
@@ -654,12 +623,15 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         </div>
       </div>
 
-      <div className="bg-white flex flex-col shadow-[0_-2px_15px_rgba(0,0,0,0.03)] z-10 relative">
+      {/* === ИСПРАВЛЕНИЕ: flex-shrink-0 чтобы подвал ввода не исчезал === */}
+      <div className="bg-white flex flex-col shadow-[0_-5px_20px_rgba(0,0,0,0.04)] z-20 relative flex-shrink-0">
         {(replyingTo || editingMessage) && (
           <div className="flex items-center justify-between bg-blue-50 border-l-2 border-blue-500 px-4 py-2 animate-in slide-in-from-bottom-2 duration-150">
             <div className="flex flex-col overflow-hidden">
               <span className="text-[12px] font-bold text-blue-500">{editingMessage ? 'Редактирование' : `Ответ для ${replyingTo.senderName}`}</span>
-              <span className="text-[13px] text-gray-600 truncate">{decryptText((editingMessage || replyingTo).content, secretKey)}</span>
+              <span className="text-[13px] text-gray-600 truncate">
+                 {editingMessage ? decryptText(editingMessage.content, secretKey) : getMediaPreview({ ...replyingTo, chatId: chat.id })}
+              </span>
             </div>
             <button onClick={() => { setReplyingTo(null); setEditingMessage(null); setInputText(''); }} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors"><X size={18} /></button>
           </div>
@@ -686,7 +658,6 @@ export default function ChatWindow({ chat, chatName, initialMessages, onBack, so
         </div>
       </div>
 
-      {/* ОСТАЛЬНЫЕ МОДАЛКИ (Не изменились) */}
       {selectedUserProfile && (
         <Portal>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setSelectedUserProfile(null)}>
