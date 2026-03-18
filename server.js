@@ -233,5 +233,5 @@ app.prepare().then(() => {
     });
   });
 
-  httpServer.listen(port, hostname, () => console.log(`> Allogram Secure запущен на порту: ${port}`));
+  httpServer.listen(port, () => console.log(`> Allogram Secure запущен на порту: ${port}`));
 });
