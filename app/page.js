@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -130,7 +129,6 @@ export default function AllogramApp() {
       });
     });
 
-    // === ИСПРАВЛЕНИЕ: Глобальное сохранение синих галочек ===
     newSocket.on('messages_read', ({ chatId, messageIds, userEmail }) => {
       setAllMessages(prev => {
         const chatMsgs = prev[chatId] || [];
@@ -342,8 +340,9 @@ export default function AllogramApp() {
     );
   };
 
+  // === ИСПРАВЛЕНО: h-[100dvh] вместо h-screen для мобильных ===
   if (isCheckingAuth) return (
-    <div className="flex h-screen items-center justify-center bg-[#e6ebea]">
+    <div className="flex h-[100dvh] items-center justify-center bg-[#e6ebea]">
       <div className="flex flex-col items-center">
         <div className="w-24 h-24 mb-6 rounded-full overflow-hidden shadow-2xl animate-pulse bg-transparent flex items-center justify-center p-0">
            <img src="/logo.jpg" alt="Allogram Logo" className="w-full h-full object-cover scale-110" />
@@ -353,8 +352,9 @@ export default function AllogramApp() {
     </div>
   );
 
+  // === ИСПРАВЛЕНО: min-h-[100dvh] для корректного отображения на телефонах ===
   if (!currentUser) return (
-    <div className="flex items-center justify-center min-h-screen bg-[#e6ebea]">
+    <div className="flex items-center justify-center min-h-[100dvh] bg-[#e6ebea]">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center animate-in fade-in zoom-in duration-300">
         
         <div className="w-28 h-28 mb-4 mx-auto rounded-full overflow-hidden shadow-2xl bg-transparent flex items-center justify-center p-0">
@@ -368,9 +368,9 @@ export default function AllogramApp() {
           <span className="text-xs text-gray-500 font-medium">{isConnected ? 'Сервер подключен' : 'Подключение...'}</span>
         </div>
         {errorMsg && <p className={`mb-4 text-sm font-medium ${errorMsg.includes('Успешная') ? 'text-green-500' : 'text-red-500'}`}>{errorMsg}</p>}
-        {!isLoginMode && <input type="text" placeholder="Ваше Имя" value={name} onChange={e => setName(e.target.value)} className="w-full mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors" />}
-        <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="w-full mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors" />
-        <input type="password" placeholder="Пароль" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAuth()} className="w-full mb-6 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors" />
+        {!isLoginMode && <input type="text" placeholder="Ваше Имя" value={name} onChange={e => setName(e.target.value)} className="w-full mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors text-[16px]" />}
+        <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="w-full mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors text-[16px]" />
+        <input type="password" placeholder="Пароль" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAuth()} className="w-full mb-6 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors text-[16px]" />
         <button onClick={handleAuth} disabled={!isConnected} className={`w-full text-white py-3.5 rounded-xl font-semibold mb-4 transition-all shadow-md active:scale-[0.98] ${isConnected ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-400'}`}>{isLoginMode ? 'ВОЙТИ' : 'ЗАРЕГИСТРИРОВАТЬСЯ'}</button>
         <button onClick={() => { setIsLoginMode(!isLoginMode); setErrorMsg(''); }} className="text-blue-500 text-sm font-medium hover:underline">{isLoginMode ? 'Создать аккаунт' : 'Уже есть аккаунт? Войти'}</button>
       </div>
@@ -383,7 +383,8 @@ export default function AllogramApp() {
   const getLastMessagePreview = (chatId) => { const msgs = allMessages[chatId] || []; if (msgs.length === 0) return 'Нет сообщений'; const last = msgs[msgs.length - 1]; if (last.type === 'audio') return '🎤 Голосовое сообщение'; if (last.type === 'video') return '📹 Видеосообщение'; if (last.type === 'image') return '🖼️ Фотография'; if (last.type === 'image_gallery') return '🖼️ Альбом'; if (last.type === 'file') return '📎 Файл'; return decryptPreview(last.content, `ALLOGRAM_E2EE_${chatId}`); };
 
   return (
-    <div className="flex h-screen bg-white overflow-hidden text-black font-sans relative animate-in fade-in duration-500">
+    // === ИСПРАВЛЕНО: h-[100dvh] для глобальной защиты от сдвига в мобильных браузерах ===
+    <div className="flex h-[100dvh] bg-white overflow-hidden text-black font-sans relative animate-in fade-in duration-500">
       
       {callState !== 'idle' && callInfo && (
         <div className="hidden">
@@ -513,7 +514,7 @@ export default function AllogramApp() {
               <label className="w-24 h-24 rounded-full bg-blue-100 flex items-center justify-center text-blue-500 mb-4 cursor-pointer relative overflow-hidden group">
                 {editAvatar ? <img src={editAvatar} className="w-full h-full object-cover" /> : <Camera size={32} />}<div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Camera size={24} className="text-white" /></div><input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
               </label>
-              <div className="w-full mb-6"><label className="text-xs text-blue-500 font-bold ml-1 uppercase">Имя</label><input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full mt-1 px-4 py-2 bg-gray-50 border-b-2 border-blue-500 outline-none font-medium transition-colors" /></div>
+              <div className="w-full mb-6"><label className="text-xs text-blue-500 font-bold ml-1 uppercase">Имя</label><input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full mt-1 px-4 py-2 bg-gray-50 border-b-2 border-blue-500 outline-none font-medium transition-colors text-[16px]" /></div>
               <button onClick={saveProfile} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-xl transition-all active:scale-95 shadow-md">Сохранить</button>
             </div>
           </div>
@@ -525,7 +526,7 @@ export default function AllogramApp() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="flex justify-between items-center p-4 border-b"><h2 className="text-lg font-semibold text-gray-800">Новая группа</h2><button onClick={() => setIsNewChatModalOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button></div>
             <div className="p-5">
-              <input type="text" placeholder="Название группы" value={newChatName} onChange={e => setNewChatName(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && createChat()} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 mb-4 transition-colors" />
+              <input type="text" placeholder="Название группы" value={newChatName} onChange={e => setNewChatName(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && createChat()} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 mb-4 transition-colors text-[16px]" />
               <button onClick={createChat} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-xl transition-all active:scale-95 shadow-md">Создать</button>
             </div>
           </div>
@@ -593,7 +594,7 @@ export default function AllogramApp() {
       )}
 
       <div className={`w-full md:w-[350px] border-r border-gray-200 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'} z-20`}>
-        <div className="flex items-center p-3 gap-2"><button onClick={() => setIsSettingsOpen(true)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><Menu className="text-gray-500" /></button><div className="flex-1 bg-[#f4f4f5] rounded-full flex items-center px-4 py-2 transition-colors focus-within:bg-gray-100"><Search size={18} className="text-gray-400 mr-2" /><input type="text" placeholder="Поиск" className="bg-transparent border-none outline-none w-full text-[15px]" /></div></div>
+        <div className="flex items-center p-3 gap-2"><button onClick={() => setIsSettingsOpen(true)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><Menu className="text-gray-500" /></button><div className="flex-1 bg-[#f4f4f5] rounded-full flex items-center px-4 py-2 transition-colors focus-within:bg-gray-100"><Search size={18} className="text-gray-400 mr-2" /><input type="text" placeholder="Поиск" className="bg-transparent border-none outline-none w-full text-[16px]" /></div></div>
         <div className="flex-1 overflow-y-auto relative">
           {visibleChats.map(chat => {
             const displayData = getChatDisplayData(chat);
