@@ -8,7 +8,7 @@ import crypto from 'crypto'; // НОВОЕ: Встроенный модуль ш
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
-const port = 3000;
+const port = 10000;
 
 const dbPath = path.resolve('./database.json');
 
