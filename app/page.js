@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import ChatWindow from '../components/ChatWindow';
-import { Search, Menu, ArrowLeft, Camera, LogOut, X, User, Settings, Edit, Palette, ChevronRight, Bell, Shield, Move, Maximize, Minimize, Phone, PhoneOff, Video as VideoIcon, Volume2, Lock } from 'lucide-react';
+import { Search, Menu, ArrowLeft, Camera, LogOut, X, User, Settings, Edit, Palette, ChevronRight, Bell, Shield, Move, Maximize, Minimize, Phone, PhoneOff, Video as VideoIcon, Volume2, Lock, ChevronDown } from 'lucide-react';
 
 const DEFAULT_WALLPAPER = { bgColor: '#8ea1a5', bgImage: 'url("https://web.telegram.org/a/chat-bg-pattern-light.ee148af944f6580293ae.png")', bgSize: 'cover', bgPos: 'center', blend: 'overlay' };
 
@@ -61,12 +61,15 @@ export default function AllogramApp() {
   const [allUsers, setAllUsers] = useState([]);
   const [userStatuses, setUserStatuses] = useState({});
 
+  // === СОСТОЯНИЯ ЗВОНКА И СВОРАЧИВАНИЯ ===
   const [callState, setCallState] = useState('idle');
   const [callInfo, setCallInfo] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null); 
+  const [isCallMinimized, setIsCallMinimized] = useState(false);
   
   const pcRef = useRef(null); 
   const localStreamRef = useRef(null);
+  const iceCandidatesQueue = useRef([]);
 
   useEffect(() => {
     const newSocket = io(window.location.origin);
@@ -142,14 +145,67 @@ export default function AllogramApp() {
     newSocket.on('webrtc_offer', async ({ offer, callerData, isVideo }) => {
       setCallInfo({ ...callerData, isIncoming: true, offer, isVideo });
       setCallState('receiving');
+      setIsCallMinimized(false);
+      iceCandidatesQueue.current = []; 
     });
-    newSocket.on('webrtc_answer', async ({ answer }) => { setCallState('active'); if (pcRef.current) await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer)); });
-    newSocket.on('webrtc_ice', async ({ candidate }) => { if (pcRef.current) await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate)); });
+
+    newSocket.on('webrtc_answer', async ({ answer }) => { 
+      setCallState('active'); 
+      if (pcRef.current) {
+        try {
+          await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+          iceCandidatesQueue.current.forEach(async (candidate) => {
+            try { await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e){}
+          });
+          iceCandidatesQueue.current = [];
+        } catch(e) { console.error("WebRTC Answer Error:", e); }
+      } 
+    });
+
+    newSocket.on('webrtc_ice', async ({ candidate }) => { 
+      if (pcRef.current && pcRef.current.remoteDescription && pcRef.current.remoteDescription.type) {
+        try { await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
+      } else {
+        iceCandidatesQueue.current.push(candidate);
+      }
+    });
+
     newSocket.on('end_call', () => cleanupCall());
 
     setSocket(newSocket);
     return () => newSocket.disconnect();
   }, []);
+
+  // === ЖЕСТКАЯ ПРИВЯЗКА ПОТОКОВ (ИСПРАВЛЯЕТ БАГ СО ЗВУКОМ) ===
+  useEffect(() => {
+    if (callState === 'idle') return;
+
+    const audioEl = document.getElementById('remote-audio');
+    if (audioEl && remoteStream && (!callInfo || !callInfo.isVideo)) {
+      audioEl.srcObject = remoteStream;
+      audioEl.play().catch(e => console.warn('Audio play error:', e));
+    }
+
+    const videoEl = document.getElementById('remote-video');
+    if (videoEl && remoteStream && callInfo && callInfo.isVideo) {
+      videoEl.srcObject = remoteStream;
+      videoEl.play().catch(e => console.warn('Video play error:', e));
+    }
+
+    const localEl = document.getElementById('local-video');
+    if (localEl && localStreamRef.current && callInfo && callInfo.isVideo) {
+      localEl.srcObject = localStreamRef.current;
+      localEl.play().catch(e => console.warn('Local play error:', e));
+    }
+  }, [remoteStream, callState, callInfo]);
+
+  // === ПРИВЯЗКА ГРОМКОСТИ К ЗВОНКУ ===
+  useEffect(() => {
+    const audioEl = document.getElementById('remote-audio');
+    if (audioEl) audioEl.volume = callVolume;
+    const videoEl = document.getElementById('remote-video');
+    if (videoEl) videoEl.volume = callVolume;
+  }, [callVolume]);
 
   const handleAuth = () => {
     setErrorMsg('');
@@ -183,9 +239,27 @@ export default function AllogramApp() {
   const closeSettings = () => { setIsSettingsModalOpen(false); setTimeout(() => setSettingsView('main'), 200); };
 
   const createPeerConnection = (targetEmail) => {
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    const config = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' }
+      ]
+    };
+    const pc = new RTCPeerConnection(config);
     pc.onicecandidate = (e) => { if (e.candidate && socket) socket.emit('webrtc_ice', { targetEmail, candidate: e.candidate }); };
-    pc.ontrack = (e) => { setRemoteStream(e.streams[0]); };
+    
+    pc.ontrack = (e) => { 
+      if (e.streams && e.streams[0]) {
+        setRemoteStream(e.streams[0]); 
+      } else {
+        let inboundStream = new MediaStream();
+        inboundStream.addTrack(e.track);
+        setRemoteStream(inboundStream);
+      }
+    };
     pcRef.current = pc;
     return pc;
   };
@@ -196,6 +270,8 @@ export default function AllogramApp() {
       localStreamRef.current = stream;
       setCallInfo({ ...targetUser, isIncoming: false, isVideo });
       setCallState('calling');
+      setIsCallMinimized(false);
+      iceCandidatesQueue.current = [];
       const pc = createPeerConnection(targetUser.email);
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
       const offer = await pc.createOffer();
@@ -211,7 +287,14 @@ export default function AllogramApp() {
       setCallState('active');
       const pc = createPeerConnection(callInfo.email);
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      
       await pc.setRemoteDescription(new RTCSessionDescription(callInfo.offer));
+      
+      iceCandidatesQueue.current.forEach(async (candidate) => {
+        try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e){}
+      });
+      iceCandidatesQueue.current = [];
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('webrtc_answer', { targetEmail: callInfo.email, answer });
@@ -219,7 +302,7 @@ export default function AllogramApp() {
   };
 
   const endCall = () => { if (callInfo && socket) socket.emit('end_call', { targetEmail: callInfo.email }); cleanupCall(); };
-  const cleanupCall = () => { if (pcRef.current) { pcRef.current.close(); pcRef.current = null; } if (localStreamRef.current) { localStreamRef.current.getTracks().forEach(t => t.stop()); localStreamRef.current = null; } setRemoteStream(null); setCallState('idle'); setCallInfo(null); };
+  const cleanupCall = () => { if (pcRef.current) { pcRef.current.close(); pcRef.current = null; } if (localStreamRef.current) { localStreamRef.current.getTracks().forEach(t => t.stop()); localStreamRef.current = null; } setRemoteStream(null); setCallState('idle'); setCallInfo(null); iceCandidatesQueue.current = []; setIsCallMinimized(false); };
 
   const WallpaperPreviewEditor = () => {
     const [mode, setMode] = useState('cover');
@@ -293,6 +376,35 @@ export default function AllogramApp() {
   return (
     <div className="flex h-screen bg-white overflow-hidden text-black font-sans relative animate-in fade-in duration-500">
       
+      {/* Скрытые теги для бесшовной работы потока */}
+      {callState !== 'idle' && callInfo && (
+        <div className="hidden">
+           <audio id="remote-audio" autoPlay playsInline />
+        </div>
+      )}
+
+      {/* МИНИ-ПЛЕЕР ЗВОНКА (когда свернут) */}
+      {isCallMinimized && callState !== 'idle' && callInfo && (
+        <div 
+          onClick={() => setIsCallMinimized(false)}
+          className="fixed top-4 right-4 md:top-6 md:right-6 z-[10001] bg-green-500 hover:bg-green-600 text-white pl-4 pr-2 py-2 rounded-full shadow-2xl cursor-pointer flex items-center gap-3 transition-all hover:scale-105 animate-in fade-in slide-in-from-top-4 border-2 border-white/20"
+        >
+          {callInfo.isVideo ? <VideoIcon size={20} className="fill-current" /> : <Phone size={20} className="fill-current" />}
+          <div className="flex flex-col">
+            <span className="font-bold text-[13px] leading-tight max-w-[100px] truncate">{callInfo.name}</span>
+            <span className="text-[11px] font-medium opacity-90 leading-tight">
+              {callState === 'active' ? 'Идет звонок...' : 'Вызов...'}
+            </span>
+          </div>
+          <button 
+            onClick={(e) => { e.stopPropagation(); endCall(); }} 
+            className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center ml-2 transition-transform hover:scale-110 shadow-sm"
+          >
+            <PhoneOff size={14} />
+          </button>
+        </div>
+      )}
+
       <div className={`absolute top-0 left-0 h-full w-[350px] bg-white z-40 shadow-2xl transform transition-transform duration-300 ease-in-out ${isSettingsOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="bg-gradient-to-tr from-blue-500 to-blue-600 h-40 p-4 flex flex-col justify-between text-white">
           <button onClick={() => setIsSettingsOpen(false)} className="self-start p-2 hover:bg-white/20 rounded-full transition-colors"><ArrowLeft size={24} /></button>
@@ -413,21 +525,20 @@ export default function AllogramApp() {
         </div>
       )}
 
+      {/* === ПОЛНОЭКРАННЫЙ ЗВОНОК С ФУНКЦИЕЙ СВОРАЧИВАНИЯ === */}
       {callState !== 'idle' && callInfo && (
-        <div className="fixed inset-0 z-[10000] bg-gray-900 flex flex-col justify-between items-center py-10 animate-in fade-in zoom-in duration-300 overflow-hidden">
+        <div className={`fixed inset-0 bg-gray-900 flex flex-col justify-between items-center py-10 transition-all duration-500 overflow-hidden ${isCallMinimized ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100 z-[10000]'}`}>
           
-          <audio ref={node => { if (node) { node.volume = callVolume; if (remoteStream && !callInfo.isVideo && node.srcObject !== remoteStream) node.srcObject = remoteStream; } }} autoPlay />
-          
+          <button onClick={() => setIsCallMinimized(true)} className="absolute top-10 left-6 z-50 p-2.5 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-all active:scale-95 border border-white/20 shadow-lg">
+            <ChevronDown size={28} />
+          </button>
+
           {callInfo.isVideo && (
             <>
-              {remoteStream && callState === 'active' ? (
-                <video ref={node => { if (node) { node.volume = callVolume; if (remoteStream && node.srcObject !== remoteStream) node.srcObject = remoteStream; } }} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover z-0" />
-              ) : (
-                <div className="absolute inset-0 bg-gray-900 z-0"></div>
-              )}
+              <video id="remote-video" autoPlay playsInline className="absolute inset-0 w-full h-full object-cover z-0" />
               {(callState === 'calling' || callState === 'active') && (
-                <div className="absolute top-6 right-6 md:top-10 md:right-10 w-28 h-40 md:w-40 md:h-56 bg-black/80 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl z-30 animate-in slide-in-from-right-10 duration-500">
-                  <video ref={node => { if (node && localStreamRef.current) node.srcObject = localStreamRef.current }} autoPlay muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
+                <div className="absolute top-6 right-6 md:top-10 md:right-10 w-28 h-40 md:w-40 md:h-56 bg-black/80 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl z-30">
+                  <video id="local-video" autoPlay muted playsInline className="w-full h-full object-cover scale-x-[-1]" />
                 </div>
               )}
               {callState !== 'active' && <div className="absolute inset-0 bg-black/50 pointer-events-none z-10" />}
@@ -460,9 +571,7 @@ export default function AllogramApp() {
             </div>
           )}
 
-          {(callInfo.isVideo && callState === 'active') && (
-             <div className="flex-1 pointer-events-none z-10"></div>
-          )}
+          {(callInfo.isVideo && callState === 'active') && <div className="flex-1 pointer-events-none z-10"></div>}
 
           <div className="w-full flex justify-center gap-8 md:gap-12 z-20 pb-6">
             {callState === 'receiving' && (
@@ -474,10 +583,10 @@ export default function AllogramApp() {
               <PhoneOff size={28} className="text-white md:w-8 md:h-8" />
             </button>
           </div>
-
         </div>
       )}
 
+      {/* ЛЕВАЯ ПАНЕЛЬ СО СПИСКОМ ЧАТОВ */}
       <div className={`w-full md:w-[350px] border-r border-gray-200 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'} z-20`}>
         <div className="flex items-center p-3 gap-2"><button onClick={() => setIsSettingsOpen(true)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><Menu className="text-gray-500" /></button><div className="flex-1 bg-[#f4f4f5] rounded-full flex items-center px-4 py-2 transition-colors focus-within:bg-gray-100"><Search size={18} className="text-gray-400 mr-2" /><input type="text" placeholder="Поиск" className="bg-transparent border-none outline-none w-full text-[15px]" /></div></div>
         <div className="flex-1 overflow-y-auto relative">
@@ -494,6 +603,7 @@ export default function AllogramApp() {
         </div>
       </div>
 
+      {/* ПРАВАЯ ПАНЕЛЬ ЧАТА */}
       <div className={`flex-1 flex flex-col ${!activeChat ? 'hidden md:flex' : 'flex'} z-10`}>
         {activeChat && socket ? (
           <ChatWindow 
