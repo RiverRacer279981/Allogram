@@ -61,6 +61,7 @@ export default function AllogramApp() {
   const [allUsers, setAllUsers] = useState([]);
   const [userStatuses, setUserStatuses] = useState({});
 
+  // === СОСТОЯНИЯ ЗВОНКА И СВОРАЧИВАНИЯ ===
   const [callState, setCallState] = useState('idle');
   const [callInfo, setCallInfo] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null); 
@@ -129,15 +130,6 @@ export default function AllogramApp() {
       });
     });
 
-    // === НОВОЕ: ОБРАБОТЧИК УДАЛЕНИЯ СООБЩЕНИЙ ===
-    newSocket.on('message_deleted', ({ chatId, msgId, forEveryone, requesterEmail }) => {
-      if (!forEveryone && currentUserRef.current && requesterEmail !== currentUserRef.current.email) return;
-      setAllMessages(prev => {
-        const chatMsgs = prev[chatId] || [];
-        return { ...prev, [chatId]: chatMsgs.filter(m => m.id !== msgId) };
-      });
-    });
-
     newSocket.on('receive_message', (msg) => {
       setAllMessages(prev => ({ ...prev, [msg.chatId]: [...(prev[msg.chatId] || []), msg] }));
       if (currentUserRef.current && msg.senderEmail !== currentUserRef.current.email && notifEnabledRef.current) {
@@ -184,6 +176,7 @@ export default function AllogramApp() {
     return () => newSocket.disconnect();
   }, []);
 
+  // === ЖЕСТКАЯ ПРИВЯЗКА ПОТОКОВ (ИСПРАВЛЯЕТ БАГ СО ЗВУКОМ) ===
   useEffect(() => {
     if (callState === 'idle') return;
 
@@ -206,6 +199,7 @@ export default function AllogramApp() {
     }
   }, [remoteStream, callState, callInfo]);
 
+  // === ПРИВЯЗКА ГРОМКОСТИ К ЗВОНКУ ===
   useEffect(() => {
     const audioEl = document.getElementById('remote-audio');
     if (audioEl) audioEl.volume = callVolume;
@@ -382,10 +376,14 @@ export default function AllogramApp() {
   return (
     <div className="flex h-screen bg-white overflow-hidden text-black font-sans relative animate-in fade-in duration-500">
       
+      {/* Скрытые теги для бесшовной работы потока */}
       {callState !== 'idle' && callInfo && (
-        <div className="hidden"><audio id="remote-audio" autoPlay playsInline /></div>
+        <div className="hidden">
+           <audio id="remote-audio" autoPlay playsInline />
+        </div>
       )}
 
+      {/* МИНИ-ПЛЕЕР ЗВОНКА (когда свернут) */}
       {isCallMinimized && callState !== 'idle' && callInfo && (
         <div 
           onClick={() => setIsCallMinimized(false)}
@@ -527,6 +525,7 @@ export default function AllogramApp() {
         </div>
       )}
 
+      {/* === ПОЛНОЭКРАННЫЙ ЗВОНОК С ФУНКЦИЕЙ СВОРАЧИВАНИЯ === */}
       {callState !== 'idle' && callInfo && (
         <div className={`fixed inset-0 bg-gray-900 flex flex-col justify-between items-center py-10 transition-all duration-500 overflow-hidden ${isCallMinimized ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100 z-[10000]'}`}>
           
@@ -587,6 +586,7 @@ export default function AllogramApp() {
         </div>
       )}
 
+      {/* ЛЕВАЯ ПАНЕЛЬ СО СПИСКОМ ЧАТОВ */}
       <div className={`w-full md:w-[350px] border-r border-gray-200 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'} z-20`}>
         <div className="flex items-center p-3 gap-2"><button onClick={() => setIsSettingsOpen(true)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><Menu className="text-gray-500" /></button><div className="flex-1 bg-[#f4f4f5] rounded-full flex items-center px-4 py-2 transition-colors focus-within:bg-gray-100"><Search size={18} className="text-gray-400 mr-2" /><input type="text" placeholder="Поиск" className="bg-transparent border-none outline-none w-full text-[15px]" /></div></div>
         <div className="flex-1 overflow-y-auto relative">
@@ -603,6 +603,7 @@ export default function AllogramApp() {
         </div>
       </div>
 
+      {/* ПРАВАЯ ПАНЕЛЬ ЧАТА */}
       <div className={`flex-1 flex flex-col ${!activeChat ? 'hidden md:flex' : 'flex'} z-10`}>
         {activeChat && socket ? (
           <ChatWindow 
