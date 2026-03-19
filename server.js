@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
@@ -9,6 +10,18 @@ import crypto from 'crypto';
 const dev = process.env.NODE_ENV !== 'production';
 const port = process.env.PORT || 10000;
 const hostname = process.env.HOSTNAME || '0.0.0.0';
+// Подключение к Supabase
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+
+// Создаем клиент только если ключи существуют
+let supabase = null;
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+  console.log('> Supabase успешно подключен!');
+} else {
+  console.warn('> ВНИМАНИЕ: Ключи Supabase не найдены в переменных окружения.');
+}
 
 const dbPath = path.resolve('./database.json');
 
