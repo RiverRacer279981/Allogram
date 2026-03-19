@@ -180,16 +180,19 @@ export default function AllogramApp() {
 
   useEffect(() => {
     if (callState === 'idle') return;
+
     const audioEl = document.getElementById('remote-audio');
     if (audioEl && remoteStream && (!callInfo || !callInfo.isVideo)) {
       audioEl.srcObject = remoteStream;
       audioEl.play().catch(e => console.warn('Audio play error:', e));
     }
+
     const videoEl = document.getElementById('remote-video');
     if (videoEl && remoteStream && callInfo && callInfo.isVideo) {
       videoEl.srcObject = remoteStream;
       videoEl.play().catch(e => console.warn('Video play error:', e));
     }
+
     const localEl = document.getElementById('local-video');
     if (localEl && localStreamRef.current && callInfo && callInfo.isVideo) {
       localEl.srcObject = localStreamRef.current;
@@ -234,11 +237,26 @@ export default function AllogramApp() {
   const closeSettings = () => { setIsSettingsModalOpen(false); setTimeout(() => setSettingsView('main'), 200); };
 
   const createPeerConnection = (targetEmail) => {
-    const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun2.l.google.com:19302' }] };
+    // ИСПРАВЛЕНИЕ: Возвращены все 5 серверов Google STUN для идеальной связи
+    const config = { 
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' }, 
+        { urls: 'stun:stun1.l.google.com:19302' }, 
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' }
+      ] 
+    };
     const pc = new RTCPeerConnection(config);
     pc.onicecandidate = (e) => { if (e.candidate && socket) socket.emit('webrtc_ice', { targetEmail, candidate: e.candidate }); };
     pc.ontrack = (e) => { 
-      if (e.streams && e.streams[0]) { setRemoteStream(e.streams[0]); } else { let inboundStream = new MediaStream(); inboundStream.addTrack(e.track); setRemoteStream(inboundStream); }
+      if (e.streams && e.streams[0]) { 
+        setRemoteStream(e.streams[0]); 
+      } else { 
+        let inboundStream = new MediaStream(); 
+        inboundStream.addTrack(e.track); 
+        setRemoteStream(inboundStream); 
+      }
     };
     pcRef.current = pc;
     return pc;
@@ -319,7 +337,10 @@ export default function AllogramApp() {
   return (
     <div className="flex h-[100dvh] bg-white overflow-hidden text-black font-sans relative animate-in fade-in duration-500">
       
-      {callState !== 'idle' && callInfo && <div className="hidden"><audio id="remote-audio" autoPlay playsInline /></div>}
+      {/* ИСПРАВЛЕНИЕ ДЛЯ АЙФОНА: Плеер прозрачный, но не 'display: none', чтобы микрофон работал */}
+      {callState !== 'idle' && callInfo && (
+        <audio id="remote-audio" autoPlay playsInline className="absolute opacity-0 w-0 h-0 pointer-events-none" />
+      )}
 
       {isCallMinimized && callState !== 'idle' && callInfo && (
         <div onClick={() => setIsCallMinimized(false)} className="fixed top-4 right-4 md:top-6 md:right-6 z-[10001] bg-green-500 hover:bg-green-600 text-white pl-4 pr-2 py-2 rounded-full shadow-2xl cursor-pointer flex items-center gap-3 transition-all hover:scale-105 animate-in fade-in slide-in-from-top-4 border-2 border-white/20">
