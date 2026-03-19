@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
 import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
@@ -6,22 +5,10 @@ import { Server } from 'socket.io';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 
 const dev = process.env.NODE_ENV !== 'production';
 const port = process.env.PORT || 10000;
-const hostname = process.env.HOSTNAME || '0.0.0.0';
-// Подключение к Supabase
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-
-// Создаем клиент только если ключи существуют
-let supabase = null;
-if (supabaseUrl && supabaseKey) {
-  supabase = createClient(supabaseUrl, supabaseKey);
-  console.log('> Supabase успешно подключен!');
-} else {
-  console.warn('> ВНИМАНИЕ: Ключи Supabase не найдены в переменных окружения.');
-}
 
 const dbPath = path.resolve('./database.json');
 
@@ -46,86 +33,100 @@ function decryptDB(text) {
   return decrypted.toString();
 }
 
+// === ПОДКЛЮЧЕНИЕ К SUPABASE ===
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+
 const rateLimits = new Map(); 
 const blacklist = new Set(); 
 
 const LIMITS = {
   MESSAGES_PER_SECOND: 5,     
   AUTH_ATTEMPTS: 5,           
-  MAX_PAYLOAD_SIZE: 10000000  
+  MAX_PAYLOAD_SIZE: 10000000  // 10 MB для медиа
 };
 
 const isSpamming = (ip, type = 'general') => {
   if (blacklist.has(ip)) return true;
-
   const now = Date.now();
   const key = `${ip}:${type}`;
   const userData = rateLimits.get(key) || { count: 0, lastReset: now };
-
   const windowSize = type === 'auth' ? 60000 : 1000;
-  if (now - userData.lastReset > windowSize) {
-    userData.count = 0;
-    userData.lastReset = now;
-  }
-
+  if (now - userData.lastReset > windowSize) { userData.count = 0; userData.lastReset = now; }
   userData.count++;
   rateLimits.set(key, userData);
-
   const limit = type === 'auth' ? LIMITS.AUTH_ATTEMPTS : LIMITS.MESSAGES_PER_SECOND;
   
   if (userData.count > limit) {
     console.warn(`[SECURITY] Блокировка ${type} для IP: ${ip}`);
-    if (userData.count > limit * 3) { 
-        blacklist.add(ip);
-        setTimeout(() => blacklist.delete(ip), 3600000); 
-    }
+    if (userData.count > limit * 3) { blacklist.add(ip); setTimeout(() => blacklist.delete(ip), 3600000); }
     return true;
   }
   return false;
 };
 
+// Временная память сервера
 let db = { 
   users: {}, 
   chats: [{ id: 'global', name: 'Глобальный Чат', type: 'group', isGlobal: true }], 
   messages: { 'global': [] } 
 };
 
-if (fs.existsSync(dbPath)) {
-  try {
-    const rawData = fs.readFileSync(dbPath, 'utf8');
-    const decrypted = rawData.startsWith('{') ? rawData : decryptDB(rawData);
-    db = JSON.parse(decrypted);
-  } catch (err) { console.error('DB Error'); }
+// === НОВЫЕ ФУНКЦИИ ЗАГРУЗКИ И СОХРАНЕНИЯ В ОБЛАКО ===
+async function loadDB() {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('app_state').select('db_json').eq('id', 1).single();
+      if (data && data.db_json && data.db_json.length > 10) {
+        const decrypted = data.db_json.startsWith('{') ? data.db_json : decryptDB(data.db_json);
+        db = JSON.parse(decrypted);
+        console.log('> База данных успешно загружена из Supabase!');
+        return;
+      }
+    } catch (e) { console.error('> Ошибка загрузки из Supabase:', e.message); }
+  }
+  
+  // Резервная загрузка из файла, если облако не настроено
+  if (fs.existsSync(dbPath)) {
+    try {
+      const rawData = fs.readFileSync(dbPath, 'utf8');
+      const decrypted = rawData.startsWith('{') ? rawData : decryptDB(rawData);
+      db = JSON.parse(decrypted);
+      console.log('> Загружена локальная база (Supabase не настроен).');
+    } catch (err) { console.error('> Ошибка локальной базы'); }
+  }
 }
 
-const saveDB = () => {
-  try {
-    fs.writeFileSync(dbPath, encryptDB(JSON.stringify(db)));
-  } catch(e) { console.error('Save error'); }
-};
+async function saveDB() {
+  const encrypted = encryptDB(JSON.stringify(db));
+  if (supabase) {
+    // Сохраняем в облако
+    const { error } = await supabase.from('app_state').upsert({ id: 1, db_json: encrypted });
+    if (error) console.error('> Ошибка сохранения в Supabase:', error.message);
+  } else {
+    // Сохраняем в файл, если нет облака
+    try { fs.writeFileSync(dbPath, encrypted); } catch(e) {}
+  }
+}
 
-const app = next({ dev, hostname, port });
+const app = next({ dev, port });
 const handle = app.getRequestHandler();
 const activeSessions = new Map();
 const activeCalls = new Map();
 
-app.prepare().then(() => {
+// Запускаем сервер ТОЛЬКО после загрузки базы
+app.prepare().then(async () => {
+  await loadDB(); // Ждем скачивания данных из облака
+
   const httpServer = createServer((req, res) => handle(req, res, parse(req.url, true)));
-  
   const io = new Server(httpServer, { 
-    cors: { origin: '*' },
-    maxHttpBufferSize: LIMITS.MAX_PAYLOAD_SIZE,
-    pingTimeout: 10000,
-    pingInterval: 5000
+    cors: { origin: '*' }, maxHttpBufferSize: LIMITS.MAX_PAYLOAD_SIZE, pingTimeout: 10000, pingInterval: 5000
   });
 
   io.on('connection', (socket) => {
     const clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
-
-    if (blacklist.has(clientIp)) {
-      socket.disconnect();
-      return;
-    }
+    if (blacklist.has(clientIp)) { socket.disconnect(); return; }
 
     const sendInitData = () => socket.emit('init_data', { chats: db.chats, messages: db.messages });
 
@@ -151,21 +152,16 @@ app.prepare().then(() => {
       if (activeCalls.has(email)) {
         const call = activeCalls.get(email);
         socket.emit('webrtc_offer', { offer: call.offer, callerData: call.callerData, isVideo: call.isVideo, targetEmail: email });
-        call.iceCandidates.forEach(candidate => {
-           socket.emit('webrtc_ice', { candidate, targetEmail: email });
-        });
+        call.iceCandidates.forEach(c => socket.emit('webrtc_ice', { candidate: c, targetEmail: email }));
       }
-
       callback({ success: true, user: { email, name: user.name, avatar: user.avatar } });
     });
 
     socket.on('send_message', (data) => {
       const session = activeSessions.get(socket.id);
       if (!session || !data.chatId) return;
-      
       if (data.content && data.content.length > LIMITS.MAX_PAYLOAD_SIZE) return;
 
-      // НОВОЕ: Добавляем пустой массив readBy (никто еще не прочитал)
       const messageToBroadcast = { ...data, senderEmail: session.email, senderName: session.name, senderAvatar: session.avatar, readBy: [] };
       if (!db.messages[data.chatId]) db.messages[data.chatId] = [];
       db.messages[data.chatId].push(messageToBroadcast);
@@ -173,7 +169,6 @@ app.prepare().then(() => {
       io.emit('receive_message', messageToBroadcast);
     });
 
-    // === НОВОЕ: Обработчик прочтения сообщений ===
     socket.on('mark_read', ({ chatId, messageIds, userEmail }) => {
       if (!db.messages[chatId]) return;
       let updated = false;
@@ -185,10 +180,7 @@ app.prepare().then(() => {
           updated = true;
         }
       });
-      if (updated) {
-        saveDB();
-        io.emit('messages_read', { chatId, messageIds, userEmail });
-      }
+      if (updated) { saveDB(); io.emit('messages_read', { chatId, messageIds, userEmail }); }
     });
 
     socket.on('edit_message', ({ chatId, msgId, newContent, requesterEmail }) => {
@@ -202,11 +194,7 @@ app.prepare().then(() => {
       }
     });
 
-    socket.on('set_active_chat', (chatId) => {
-      const session = activeSessions.get(socket.id);
-      if (session) { session.activeChat = chatId; }
-    });
-
+    socket.on('set_active_chat', (chatId) => { const session = activeSessions.get(socket.id); if (session) session.activeChat = chatId; });
     socket.on('logout', () => activeSessions.delete(socket.id));
     socket.on('disconnect', () => { 
       const session = activeSessions.get(socket.id);
@@ -223,8 +211,7 @@ app.prepare().then(() => {
 
     socket.on('get_all_users', (callback) => callback(Object.values(db.users).map(u => ({ email: u.email, name: u.name, avatar: u.avatar }))));
     socket.on('create_chat', ({ name }) => {
-        const s = activeSessions.get(socket.id);
-        if (!s) return;
+        const s = activeSessions.get(socket.id); if (!s) return;
         const n = { id: `chat_${Date.now()}`, name, type: 'group', members: [{ email: s.email, name: s.name, avatar: s.avatar, role: 'admin' }] };
         db.chats.push(n); db.messages[n.id] = []; saveDB(); io.emit('chat_updated', n);
     });
@@ -234,22 +221,9 @@ app.prepare().then(() => {
       if (session) activeCalls.set(d.targetEmail, { offer: d.offer, callerData: d.callerData, isVideo: d.isVideo, callerEmail: session.email, iceCandidates: [] });
       for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('webrtc_offer', d); 
     });
-
-    socket.on('webrtc_answer', (d) => { 
-      const session = activeSessions.get(socket.id);
-      if (session) activeCalls.delete(session.email); 
-      for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('webrtc_answer', d); 
-    });
-
-    socket.on('webrtc_ice', (d) => { 
-      if (activeCalls.has(d.targetEmail)) activeCalls.get(d.targetEmail).iceCandidates.push(d.candidate);
-      for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('webrtc_ice', d); 
-    });
-
-    socket.on('end_call', (d) => { 
-      activeCalls.delete(d.targetEmail); 
-      for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('end_call'); 
-    });
+    socket.on('webrtc_answer', (d) => { const session = activeSessions.get(socket.id); if (session) activeCalls.delete(session.email); for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('webrtc_answer', d); });
+    socket.on('webrtc_ice', (d) => { if (activeCalls.has(d.targetEmail)) activeCalls.get(d.targetEmail).iceCandidates.push(d.candidate); for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('webrtc_ice', d); });
+    socket.on('end_call', (d) => { activeCalls.delete(d.targetEmail); for (const [id, s] of activeSessions.entries()) if (s.email === d.targetEmail) io.to(id).emit('end_call'); });
   });
 
   httpServer.listen(port, () => console.log(`> Allogram Secure запущен на порту: ${port}`));
