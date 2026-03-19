@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
 const dev = process.env.NODE_ENV !== 'production';
-const port = process.env.PORT || 10000;
+const port = process.env.PORT || 3000;
 
 const dbPath = path.resolve('./database.json');
 
@@ -41,9 +41,10 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 const rateLimits = new Map(); 
 const blacklist = new Set(); 
 
+// === ИСПРАВЛЕНИЕ: Увеличены лимиты, чтобы сообщения не удалялись ===
 const LIMITS = {
-  MESSAGES_PER_SECOND: 5,     
-  AUTH_ATTEMPTS: 5,           
+  MESSAGES_PER_SECOND: 100,   // Было 5, стало 100 сообщений в секунду
+  AUTH_ATTEMPTS: 20,          
   MAX_PAYLOAD_SIZE: 10000000  // 10 MB для медиа
 };
 
@@ -59,8 +60,12 @@ const isSpamming = (ip, type = 'general') => {
   const limit = type === 'auth' ? LIMITS.AUTH_ATTEMPTS : LIMITS.MESSAGES_PER_SECOND;
   
   if (userData.count > limit) {
-    console.warn(`[SECURITY] Блокировка ${type} для IP: ${ip}`);
-    if (userData.count > limit * 3) { blacklist.add(ip); setTimeout(() => blacklist.delete(ip), 3600000); }
+    console.warn(`[SECURITY] Превышен лимит ${type} для IP: ${ip}`);
+    // ИСПРАВЛЕНИЕ: Даем жесткий бан IP только за спам авторизациями (вход/регистрация)
+    if (type === 'auth' && userData.count > limit * 3) { 
+      blacklist.add(ip); 
+      setTimeout(() => blacklist.delete(ip), 3600000); 
+    }
     return true;
   }
   return false;
@@ -73,7 +78,7 @@ let db = {
   messages: { 'global': [] } 
 };
 
-// === НОВЫЕ ФУНКЦИИ ЗАГРУЗКИ И СОХРАНЕНИЯ В ОБЛАКО ===
+// === ФУНКЦИИ ЗАГРУЗКИ И СОХРАНЕНИЯ В ОБЛАКО ===
 async function loadDB() {
   if (supabase) {
     try {
@@ -101,11 +106,9 @@ async function loadDB() {
 async function saveDB() {
   const encrypted = encryptDB(JSON.stringify(db));
   if (supabase) {
-    // Сохраняем в облако
     const { error } = await supabase.from('app_state').upsert({ id: 1, db_json: encrypted });
     if (error) console.error('> Ошибка сохранения в Supabase:', error.message);
   } else {
-    // Сохраняем в файл, если нет облака
     try { fs.writeFileSync(dbPath, encrypted); } catch(e) {}
   }
 }
@@ -115,9 +118,8 @@ const handle = app.getRequestHandler();
 const activeSessions = new Map();
 const activeCalls = new Map();
 
-// Запускаем сервер ТОЛЬКО после загрузки базы
 app.prepare().then(async () => {
-  await loadDB(); // Ждем скачивания данных из облака
+  await loadDB(); 
 
   const httpServer = createServer((req, res) => handle(req, res, parse(req.url, true)));
   const io = new Server(httpServer, { 
@@ -132,7 +134,11 @@ app.prepare().then(async () => {
 
     socket.use(([event, data], next) => {
       if (isSpamming(clientIp, event === 'login' || event === 'register' ? 'auth' : 'general')) {
-        return next(new Error('Rate limit exceeded'));
+        // ИСПРАВЛЕНИЕ: Если это просто спам сообщениями — тихо гасим пакет, чтобы не выкидывать юзера
+        if (event === 'login' || event === 'register') {
+          return next(new Error('Слишком много попыток. Подождите.'));
+        }
+        return; 
       }
       next();
     });
