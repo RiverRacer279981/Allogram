@@ -15,7 +15,7 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 
 // Создаем клиент только если ключи существуют
-let supabase = null;
+let supabase = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmZmVlendsY2psaWh6cHdlbWJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5Mjc0ODAsImV4cCI6MjA4OTUwMzQ4MH0.tqJwZ_vXyy48dGW8DYm0MSBc4u8rIRml-Fq4XPnvRog;
 if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
   console.log('> Supabase успешно подключен!');
