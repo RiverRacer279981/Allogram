@@ -41,9 +41,8 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 const rateLimits = new Map(); 
 const blacklist = new Set(); 
 
-// === ИСПРАВЛЕНИЕ: Увеличены лимиты, чтобы сообщения не удалялись ===
 const LIMITS = {
-  MESSAGES_PER_SECOND: 100,   // Было 5, стало 100 сообщений в секунду
+  MESSAGES_PER_SECOND: 100,   // Разрешаем быструю отправку
   AUTH_ATTEMPTS: 20,          
   MAX_PAYLOAD_SIZE: 10000000  // 10 MB для медиа
 };
@@ -61,7 +60,6 @@ const isSpamming = (ip, type = 'general') => {
   
   if (userData.count > limit) {
     console.warn(`[SECURITY] Превышен лимит ${type} для IP: ${ip}`);
-    // ИСПРАВЛЕНИЕ: Даем жесткий бан IP только за спам авторизациями (вход/регистрация)
     if (type === 'auth' && userData.count > limit * 3) { 
       blacklist.add(ip); 
       setTimeout(() => blacklist.delete(ip), 3600000); 
@@ -78,7 +76,7 @@ let db = {
   messages: { 'global': [] } 
 };
 
-// === ФУНКЦИИ ЗАГРУЗКИ И СОХРАНЕНИЯ В ОБЛАКО ===
+// === ФУНКЦИИ ЗАГРУЗКИ В ОБЛАКО ===
 async function loadDB() {
   if (supabase) {
     try {
@@ -92,7 +90,7 @@ async function loadDB() {
     } catch (e) { console.error('> Ошибка загрузки из Supabase:', e.message); }
   }
   
-  // Резервная загрузка из файла, если облако не настроено
+  // Резервная загрузка из файла
   if (fs.existsSync(dbPath)) {
     try {
       const rawData = fs.readFileSync(dbPath, 'utf8');
@@ -103,14 +101,31 @@ async function loadDB() {
   }
 }
 
-async function saveDB() {
-  const encrypted = encryptDB(JSON.stringify(db));
-  if (supabase) {
-    const { error } = await supabase.from('app_state').upsert({ id: 1, db_json: encrypted });
-    if (error) console.error('> Ошибка сохранения в Supabase:', error.message);
-  } else {
-    try { fs.writeFileSync(dbPath, encrypted); } catch(e) {}
-  }
+// === ИСПРАВЛЕНО: УМНОЕ СОХРАНЕНИЕ (DEBOUNCE) ===
+let saveTimeout = null;
+let isSaving = false;
+
+function saveDB() {
+  // Сбрасываем таймер, если пришло новое сообщение до истечения 2 секунд
+  if (saveTimeout) clearTimeout(saveTimeout);
+  
+  saveTimeout = setTimeout(async () => {
+    if (isSaving) return; // Не начинаем новое сохранение, пока идет старое
+    isSaving = true;
+    try {
+      const encrypted = encryptDB(JSON.stringify(db));
+      if (supabase) {
+        const { error } = await supabase.from('app_state').upsert({ id: 1, db_json: encrypted });
+        if (error) console.error('> Ошибка сохранения в Supabase (Слишком большой объем?):', error.message);
+      } else {
+        fs.writeFileSync(dbPath, encrypted);
+      }
+    } catch(e) {
+      console.error('> Ошибка шифрования/сохранения:', e.message);
+    } finally {
+      isSaving = false;
+    }
+  }, 2000); // Сервер ждет 2 секунды тишины, прежде чем отправить бэкап
 }
 
 const app = next({ dev, port });
@@ -134,7 +149,6 @@ app.prepare().then(async () => {
 
     socket.use(([event, data], next) => {
       if (isSpamming(clientIp, event === 'login' || event === 'register' ? 'auth' : 'general')) {
-        // ИСПРАВЛЕНИЕ: Если это просто спам сообщениями — тихо гасим пакет, чтобы не выкидывать юзера
         if (event === 'login' || event === 'register') {
           return next(new Error('Слишком много попыток. Подождите.'));
         }
@@ -171,7 +185,8 @@ app.prepare().then(async () => {
       const messageToBroadcast = { ...data, senderEmail: session.email, senderName: session.name, senderAvatar: session.avatar, readBy: [] };
       if (!db.messages[data.chatId]) db.messages[data.chatId] = [];
       db.messages[data.chatId].push(messageToBroadcast);
-      saveDB();
+      
+      saveDB(); // Теперь это вызывает умное сохранение
       io.emit('receive_message', messageToBroadcast);
     });
 
@@ -186,7 +201,10 @@ app.prepare().then(async () => {
           updated = true;
         }
       });
-      if (updated) { saveDB(); io.emit('messages_read', { chatId, messageIds, userEmail }); }
+      if (updated) { 
+        saveDB(); // Умное сохранение
+        io.emit('messages_read', { chatId, messageIds, userEmail }); 
+      }
     });
 
     socket.on('edit_message', ({ chatId, msgId, newContent, requesterEmail }) => {
@@ -195,7 +213,8 @@ app.prepare().then(async () => {
         const msg = chatMsgs.find(m => m.id === msgId);
         if (msg && msg.senderEmail === requesterEmail) {
           msg.content = newContent; msg.isEdited = true;
-          saveDB(); io.emit('message_edited', { chatId, msgId, newContent, isEdited: true });
+          saveDB(); // Умное сохранение
+          io.emit('message_edited', { chatId, msgId, newContent, isEdited: true });
         }
       }
     });
@@ -219,7 +238,9 @@ app.prepare().then(async () => {
     socket.on('create_chat', ({ name }) => {
         const s = activeSessions.get(socket.id); if (!s) return;
         const n = { id: `chat_${Date.now()}`, name, type: 'group', members: [{ email: s.email, name: s.name, avatar: s.avatar, role: 'admin' }] };
-        db.chats.push(n); db.messages[n.id] = []; saveDB(); io.emit('chat_updated', n);
+        db.chats.push(n); db.messages[n.id] = []; 
+        saveDB(); 
+        io.emit('chat_updated', n);
     });
 
     socket.on('webrtc_offer', (d) => { 
